@@ -1,24 +1,69 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, History, Layers, FileText, Bell, BarChart3, Filter, ArrowUpDown } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/rules/StatCard';
 import { RulesTable } from '@/components/rules/RulesTable';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { mockRules, categoryOptions } from '@/data/mockData';
+import { categoryOptions } from '@/data/mockData';
 import { FraudRule, RuleStatus } from '@/types/fraud';
 import { useToast } from '@/hooks/use-toast';
+import { getRules, updateRuleStatus, deleteRule } from '@/api/rules';
 
 type FilterTab = 'all' | 'active' | 'inactive' | 'draft';
 
 export default function FraudRulesEngine() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [rules, setRules] = useState<FraudRule[]>(mockRules);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  const { data: rules = [], isLoading, error } = useQuery({
+    queryKey: ['rules'],
+    queryFn: getRules,
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: RuleStatus }) =>
+      updateRuleStatus(id, status),
+    onSuccess: (updatedRule) => {
+      queryClient.invalidateQueries({ queryKey: ['rules'] });
+      toast({
+        title: 'Status Updated',
+        description: `${updatedRule.name} is now ${updatedRule.status}.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'Failed to update rule status.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const deleteRuleMutation = useMutation({
+    mutationFn: deleteRule,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rules'] });
+      toast({
+        title: 'Rule Deleted',
+        description: 'Rule has been deleted successfully.',
+        variant: 'destructive',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete rule.',
+        variant: 'destructive',
+      });
+    },
+  });
 
   const stats = useMemo(() => ({
     activeRules: rules.filter((r) => r.status === 'active').length,
@@ -42,13 +87,7 @@ export default function FraudRulesEngine() {
   }, [rules, activeTab, categoryFilter]);
 
   const handleStatusChange = (rule: FraudRule, status: RuleStatus) => {
-    setRules((prev) =>
-      prev.map((r) => (r.id === rule.id ? { ...r, status } : r))
-    );
-    toast({
-      title: 'Status Updated',
-      description: `${rule.name} is now ${status}.`,
-    });
+    updateStatusMutation.mutate({ id: rule.id, status });
   };
 
   const handleEdit = (rule: FraudRule) => {
@@ -56,13 +95,11 @@ export default function FraudRulesEngine() {
   };
 
   const handleDelete = (rule: FraudRule) => {
-    setRules((prev) => prev.filter((r) => r.id !== rule.id));
-    toast({
-      title: 'Rule Deleted',
-      description: `${rule.name} has been deleted.`,
-      variant: 'destructive',
-    });
+    deleteRuleMutation.mutate(rule.id);
   };
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error loading rules</div>;
 
   return (
     <MainLayout>
