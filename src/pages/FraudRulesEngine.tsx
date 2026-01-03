@@ -1,0 +1,165 @@
+import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, History, Layers, FileText, Bell, BarChart3, Filter, ArrowUpDown } from 'lucide-react';
+import { MainLayout } from '@/components/layout/MainLayout';
+import { StatCard } from '@/components/rules/StatCard';
+import { RulesTable } from '@/components/rules/RulesTable';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { mockRules, categoryOptions } from '@/data/mockData';
+import { FraudRule, RuleStatus } from '@/types/fraud';
+import { useToast } from '@/hooks/use-toast';
+
+type FilterTab = 'all' | 'active' | 'inactive' | 'draft';
+
+export default function FraudRulesEngine() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [rules, setRules] = useState<FraudRule[]>(mockRules);
+  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  const stats = useMemo(() => ({
+    activeRules: rules.filter((r) => r.status === 'active').length,
+    drafts: rules.filter((r) => r.status === 'draft').length,
+    triggered24h: rules.reduce((sum, r) => sum + r.triggers24h, 0),
+    avgFraudScore: 45,
+  }), [rules]);
+
+  const filteredRules = useMemo(() => {
+    return rules.filter((rule) => {
+      const tabMatch =
+        activeTab === 'all' ||
+        (activeTab === 'active' && rule.status === 'active') ||
+        (activeTab === 'inactive' && rule.status === 'inactive') ||
+        (activeTab === 'draft' && rule.status === 'draft');
+      
+      const categoryMatch = categoryFilter === 'all' || rule.category === categoryFilter;
+      
+      return tabMatch && categoryMatch;
+    });
+  }, [rules, activeTab, categoryFilter]);
+
+  const handleStatusChange = (rule: FraudRule, status: RuleStatus) => {
+    setRules((prev) =>
+      prev.map((r) => (r.id === rule.id ? { ...r, status } : r))
+    );
+    toast({
+      title: 'Status Updated',
+      description: `${rule.name} is now ${status}.`,
+    });
+  };
+
+  const handleEdit = (rule: FraudRule) => {
+    navigate(`/rules/${rule.id}/edit`);
+  };
+
+  const handleDelete = (rule: FraudRule) => {
+    setRules((prev) => prev.filter((r) => r.id !== rule.id));
+    toast({
+      title: 'Rule Deleted',
+      description: `${rule.name} has been deleted.`,
+      variant: 'destructive',
+    });
+  };
+
+  return (
+    <MainLayout>
+      {/* Page Header */}
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-primary mb-1">Fraud Rules Engine</h1>
+          <p className="text-muted-foreground">
+            Configure detection logic, set risk thresholds, and manage active system rules.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" className="gap-2">
+            <History className="w-4 h-4" />
+            Audit Log
+          </Button>
+          <Button onClick={() => navigate('/rules/create')} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Create New Rule
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <StatCard
+          label="Active Rules"
+          value={stats.activeRules}
+          icon={Layers}
+          iconBgColor="bg-primary/10"
+          iconColor="text-primary"
+        />
+        <StatCard
+          label="Drafts"
+          value={stats.drafts}
+          icon={FileText}
+          iconBgColor="bg-muted"
+          iconColor="text-muted-foreground"
+        />
+        <StatCard
+          label="Triggered (24h)"
+          value={stats.triggered24h.toLocaleString()}
+          icon={Bell}
+          iconBgColor="bg-destructive/10"
+          iconColor="text-destructive"
+        />
+        <StatCard
+          label="Avg Fraud Score"
+          value={stats.avgFraudScore}
+          subtitle="/100"
+          icon={BarChart3}
+          iconBgColor="bg-info/10"
+          iconColor="text-info"
+        />
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center justify-between mb-6">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as FilterTab)}>
+          <TabsList className="bg-muted/50">
+            <TabsTrigger value="all">All Rules</TabsTrigger>
+            <TabsTrigger value="active">Active</TabsTrigger>
+            <TabsTrigger value="inactive">Inactive</TabsTrigger>
+            <TabsTrigger value="draft">Drafts</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div className="flex items-center gap-3">
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-40 bg-card">
+              <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Category: All</SelectItem>
+              {categoryOptions.map((cat) => (
+                <SelectItem key={cat.value} value={cat.value}>
+                  {cat.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" className="gap-2">
+            <ArrowUpDown className="w-4 h-4" />
+            Sort
+          </Button>
+        </div>
+      </div>
+
+      {/* Rules Table */}
+      <RulesTable
+        rules={filteredRules}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onStatusChange={handleStatusChange}
+      />
+    </MainLayout>
+  );
+}

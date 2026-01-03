@@ -1,0 +1,226 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 224 71% 4%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 224 71% 4%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71% 4%;
+
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 224 71% 4%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 262 83% 96%;
+    --accent-foreground: 262 83% 40%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 262 83% 58%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 9% 46%;
+    --sidebar-primary: 262 83% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 262 83% 96%;
+    --sidebar-accent-foreground: 262 83% 40%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 262 83% 58%;
+    --sidebar-section: 262 83% 45%;
+
+    /* Severity colors */
+    --severity-high: 0 84% 60%;
+    --severity-high-bg: 0 84% 97%;
+    --severity-medium: 38 92% 50%;
+    --severity-medium-bg: 38 92% 97%;
+    --severity-low: 142 76% 36%;
+    --severity-low-bg: 142 76% 97%;
+
+    /* Category colors */
+    --category-identity: 262 83% 58%;
+    --category-identity-bg: 262 83% 96%;
+    --category-transaction: 0 84% 60%;
+    --category-transaction-bg: 0 84% 97%;
+    --category-geolocation: 142 76% 36%;
+    --category-geolocation-bg: 142 76% 97%;
+    --category-document: 199 89% 48%;
+    --category-document-bg: 199 89% 97%;
+
+    /* Chart colors */
+    --chart-1: 262 83% 58%;
+    --chart-2: 142 76% 36%;
+    --chart-3: 0 84% 60%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 199 89% 48%;
+  }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 220 14% 96%;
+
+    --card: 224 71% 8%;
+    --card-foreground: 220 14% 96%;
+
+    --popover: 224 71% 8%;
+    --popover-foreground: 220 14% 96%;
+
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 224 71% 12%;
+    --secondary-foreground: 220 14% 96%;
+
+    --muted: 224 71% 12%;
+    --muted-foreground: 220 9% 60%;
+
+    --accent: 262 83% 20%;
+    --accent-foreground: 262 83% 80%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 224 71% 15%;
+    --input: 224 71% 15%;
+    --ring: 262 83% 58%;
+
+    --sidebar-background: 224 71% 6%;
+    --sidebar-foreground: 220 9% 60%;
+    --sidebar-primary: 262 83% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 262 83% 20%;
+    --sidebar-accent-foreground: 262 83% 80%;
+    --sidebar-border: 224 71% 15%;
+    --sidebar-ring: 262 83% 58%;
+    --sidebar-section: 262 83% 70%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+@layer components {
+  .stat-card {
+    @apply bg-card rounded-xl p-5 border border-border shadow-sm transition-all duration-200 hover:shadow-md;
+  }
+
+  .stat-card-icon {
+    @apply w-12 h-12 rounded-xl flex items-center justify-center;
+  }
+
+  .severity-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  .severity-high {
+    @apply bg-[hsl(var(--severity-high-bg))] text-[hsl(var(--severity-high))];
+  }
+
+  .severity-medium {
+    @apply bg-[hsl(var(--severity-medium-bg))] text-[hsl(var(--severity-medium))];
+  }
+
+  .severity-low {
+    @apply bg-[hsl(var(--severity-low-bg))] text-[hsl(var(--severity-low))];
+  }
+
+  .category-badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border;
+  }
+
+  .category-identity {
+    @apply bg-[hsl(var(--category-identity-bg))] text-[hsl(var(--category-identity))] border-[hsl(var(--category-identity)/0.3)];
+  }
+
+  .category-transaction {
+    @apply bg-[hsl(var(--category-transaction-bg))] text-[hsl(var(--category-transaction))] border-[hsl(var(--category-transaction)/0.3)];
+  }
+
+  .category-geolocation {
+    @apply bg-[hsl(var(--category-geolocation-bg))] text-[hsl(var(--category-geolocation))] border-[hsl(var(--category-geolocation)/0.3)];
+  }
+
+  .category-document {
+    @apply bg-[hsl(var(--category-document-bg))] text-[hsl(var(--category-document))] border-[hsl(var(--category-document)/0.3)];
+  }
+
+  .logic-block {
+    @apply bg-muted/50 rounded-lg p-4 border border-border;
+  }
+
+  .logic-operator {
+    @apply inline-flex items-center justify-center px-3 py-1 rounded-md text-xs font-semibold;
+  }
+
+  .logic-if {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .logic-and {
+    @apply bg-accent text-accent-foreground border border-primary/20;
+  }
+
+  .logic-or {
+    @apply bg-warning/20 text-warning border border-warning/30;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}
