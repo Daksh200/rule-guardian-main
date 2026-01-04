@@ -117,3 +117,27 @@ def get_rule_stats(db: Session, rule_id: int):
         "total_executions": total_executions,
         "triggers_24h": triggers_24h
     }
+def get_active_rule_versions(db: Session):
+    return db.query(models.RuleVersion).filter(
+        models.RuleVersion.is_active == True
+    ).all()
+
+def create_execution_log(
+    db: Session,
+    rule_id: int,
+    rule_version_id: int,
+    input_payload: dict,
+    execution_result: bool,
+    severity: str
+):
+    log = models.RuleExecutionLog(
+        rule_id=rule_id,
+        rule_version_id=rule_version_id,
+        input_payload=input_payload,
+        execution_result=execution_result,
+        severity=severity
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return log
