@@ -81,20 +81,25 @@ class RuleVersion(Base):
     created_by_id = Column(Integer, ForeignKey("users.id"))
     notes = Column(Text)
     is_active = Column(Boolean, default=False)
-    
+
     rule = relationship("Rule", back_populates="versions")
     creator = relationship("User", back_populates="rule_versions")
+    executions = relationship("RuleExecutionLog", back_populates="rule_version")
 
 class RuleExecutionLog(Base):
     __tablename__ = "rule_executions"
 
     id = Column(Integer, primary_key=True, index=True)
     rule_id = Column(Integer, ForeignKey("rules.id"))
+    rule_version_id = Column(Integer, ForeignKey("rule_versions.id"))
     claim_id = Column(String, index=True) # External Claim ID
-    execution_date = Column(DateTime(timezone=True), server_default=func.now())
+    executed_at = Column(DateTime(timezone=True), server_default=func.now())
     severity = Column(Enum(Severity))
     trigger_reasons = Column(ARRAY(String))
     decision = Column(Enum(Decision), default=Decision.pending)
     amount = Column(Float)
-    
+    input_payload = Column(JSON)
+    execution_result = Column(Boolean)
+
     rule = relationship("Rule", back_populates="executions")
+    rule_version = relationship("RuleVersion", back_populates="executions")

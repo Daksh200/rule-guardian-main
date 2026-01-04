@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict, Any
 from .. import crud, models, schemas, database
+from ..services.rule_engine import evaluate_rule
 from datetime import datetime, timedelta
 
 router = APIRouter(
@@ -95,3 +96,33 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db)):
 def read_rule_versions(rule_id: int, db: Session = Depends(get_db)):
     versions = crud.get_rule_versions(db, rule_id=rule_id)
     return versions
+
+    return triggered_rules
+@router.post("/execute")
+def execute_rules(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db)
+):
+    active_versions = crud.get_active_rule_versions(db)
+    triggered_rules = []
+
+    for version in active_versions:
+        result = evaluate_rule(version.logic_snapshot, payload)
+
+        crud.create_execution_log(
+            db=db,
+            rule_id=version.rule_id,
+            rule_version_id=version.id,
+            input_payload=payload,
+            execution_result=result["result"],
+            severity=result["severity"]
+        )
+
+        if result["result"] is True:
+            triggered_rules.append({
+                "rule_id": version.rule_id,
+                "rule_version_id": version.id,
+                "severity": result["severity"]
+            })
+
+    return triggered_rules
