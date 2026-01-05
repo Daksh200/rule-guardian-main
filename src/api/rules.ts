@@ -5,7 +5,13 @@ const API_URL = 'http://localhost:8000/api/rules';
 
 export const getRules = async (): Promise<FraudRule[]> => {
   const response = await axios.get(API_URL);
-  return response.data;
+  return response.data.map((rule: any) => ({
+    ...rule,
+    id: rule.id.toString(),
+    ruleId: rule.rule_id,
+    owner: rule.ownerName, // Keep backward compatibility
+    versions: [], // Backend doesn't populate this in list view
+  }));
 };
 
 export const getRule = async (id: string): Promise<FraudRule> => {

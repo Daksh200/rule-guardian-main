@@ -42,7 +42,7 @@ def read_rules(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
         if rule.creator:
             rule.createdBy = rule.creator.full_name or rule.creator.email
         if rule.owner:
-            rule.owner = rule.owner.full_name or rule.owner.email
+            rule.ownerName = rule.owner.full_name or rule.owner.email
             
         # Get current version
         latest_version = db.query(models.RuleVersion).filter(
@@ -68,7 +68,7 @@ def read_rule(rule_id: int, db: Session = Depends(get_db)):
     if db_rule.creator:
         db_rule.createdBy = db_rule.creator.full_name or db_rule.creator.email
     if db_rule.owner:
-        db_rule.owner = db_rule.owner.full_name or db_rule.owner.email
+        db_rule.ownerName = db_rule.owner.full_name or db_rule.owner.email
         
     latest_version = db.query(models.RuleVersion).filter(
         models.RuleVersion.rule_id == db_rule.id

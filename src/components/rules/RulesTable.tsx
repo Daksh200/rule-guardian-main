@@ -75,13 +75,22 @@ export function RulesTable({ rules, onEdit, onDelete, onStatusChange }: RulesTab
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
-                  <Switch
-                    checked={rule.status === 'active'}
-                    onCheckedChange={(checked) =>
-                      onStatusChange(rule, checked ? 'active' : 'inactive')
-                    }
-                    disabled={rule.status === 'draft'}
-                  />
+                  {rule.status === 'draft' ? (
+                    <Button
+                      size="sm"
+                      onClick={() => onStatusChange(rule, 'active')}
+                      className="text-xs"
+                    >
+                      Publish
+                    </Button>
+                  ) : (
+                    <Switch
+                      checked={rule.status === 'active'}
+                      onCheckedChange={(checked) =>
+                        onStatusChange(rule, checked ? 'active' : 'inactive')
+                      }
+                    />
+                  )}
                   <span
                     className={cn(
                       'text-sm font-medium',

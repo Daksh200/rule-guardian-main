@@ -44,7 +44,7 @@ export interface FraudRule {
   triggerDelta: number;
   lastUpdated: string;
   createdBy: string;
-  owner: string;
+  ownerName: string;
   tags: string[];
   logic: RuleLogic;
   versions: RuleVersion[];

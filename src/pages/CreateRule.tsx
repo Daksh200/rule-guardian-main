@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Info, SlidersHorizontal, Lightbulb, FileText, FlaskConical } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { LogicBuilder } from '@/components/rules/LogicBuilder';
 import { Button } from '@/components/ui/button';
@@ -10,12 +11,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ruleTypeOptions, severityOptions, admins } from '@/data/mockData';
-import { ConditionGroup } from '@/types/fraud';
+import { ConditionGroup, FraudRule } from '@/types/fraud';
 import { useToast } from '@/hooks/use-toast';
+import { createRule } from '@/api/rules';
 
 export default function CreateRule() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   const [ruleName, setRuleName] = useState('');
   const [description, setDescription] = useState('');
@@ -51,9 +54,44 @@ export default function CreateRule() {
   };
 
   const handleSaveDraft = () => {
-    toast({
-      title: 'Draft Saved',
-      description: 'Your rule has been saved as a draft.',
+    if (!ruleName) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please enter a rule name.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Map frontend ruleType to backend category
+    const categoryMap: { [key: string]: string } = {
+      'velocity': 'transaction',
+      'geo': 'geolocation',
+      'document': 'document',
+      'identity': 'identity',
+    };
+
+    const ruleData = {
+      rule_id: `RL-${Date.now()}`, // Generate a unique rule ID
+      name: ruleName,
+      description: description || '',
+      category: categoryMap[ruleType] || ruleType || 'transaction',
+      severity: (severity as 'high' | 'medium' | 'low') || 'medium',
+      status: 'draft' as const,
+      logic: {
+        groups: logicGroups,
+      },
+      tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
+    };
+
+    createRuleMutation.mutate(ruleData, {
+      onSuccess: (newRule) => {
+        toast({
+          title: 'Draft Saved',
+          description: 'Your rule has been saved as a draft.',
+        });
+        // Don't navigate away, stay on the create page
+      },
     });
   };
 
@@ -64,6 +102,26 @@ export default function CreateRule() {
     });
   };
 
+  const createRuleMutation = useMutation({
+    mutationFn: createRule,
+    onSuccess: (newRule) => {
+      queryClient.invalidateQueries({ queryKey: ['rules'] });
+      toast({
+        title: 'Rule Published',
+        description: `${ruleName} is now active.`,
+      });
+      navigate('/');
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: 'Failed to create rule. Please try again.',
+        variant: 'destructive',
+      });
+      console.error('Failed to create rule:', error);
+    },
+  });
+
   const handlePublish = () => {
     if (!ruleName || !ruleType || !severity) {
       toast({
@@ -73,12 +131,29 @@ export default function CreateRule() {
       });
       return;
     }
-    
-    toast({
-      title: 'Rule Published',
-      description: `${ruleName} is now active.`,
-    });
-    navigate('/');
+
+    // Map frontend ruleType to backend category
+    const categoryMap: { [key: string]: string } = {
+      'velocity': 'transaction',
+      'geo': 'geolocation',
+      'document': 'document',
+      'identity': 'identity',
+    };
+
+    const ruleData = {
+      rule_id: `RL-${Date.now()}`, // Generate a unique rule ID
+      name: ruleName,
+      description: description || '',
+      category: categoryMap[ruleType] || ruleType,
+      severity: severity as 'high' | 'medium' | 'low',
+      status: 'active' as const,
+      logic: {
+        groups: logicGroups,
+      },
+      tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
+    };
+
+    createRuleMutation.mutate(ruleData);
   };
 
   return (

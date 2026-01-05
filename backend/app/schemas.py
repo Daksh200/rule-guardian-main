@@ -70,7 +70,7 @@ class Rule(RuleBase):
     triggerDelta: int = 0 # Computed field
     lastUpdated: str = "" # Computed field
     createdBy: str = "" # Computed field
-    owner: str = "" # Computed field
+    ownerName: str = "" # Computed field
     currentVersion: str = "" # Computed field
 
     class Config:

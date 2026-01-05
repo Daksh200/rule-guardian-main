@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
 from . import models, schemas
 from datetime import datetime, timedelta
@@ -27,10 +27,16 @@ def create_user(db: Session, user: schemas.UserCreate):
 
 # --- Rule CRUD ---
 def get_rules(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Rule).offset(skip).limit(limit).all()
+    return db.query(models.Rule).options(
+        joinedload(models.Rule.creator),
+        joinedload(models.Rule.owner)
+    ).offset(skip).limit(limit).all()
 
 def get_rule(db: Session, rule_id: int):
-    return db.query(models.Rule).filter(models.Rule.id == rule_id).first()
+    return db.query(models.Rule).options(
+        joinedload(models.Rule.creator),
+        joinedload(models.Rule.owner)
+    ).filter(models.Rule.id == rule_id).first()
 
 def create_rule(db: Session, rule: schemas.RuleCreate, user_id: int):
     # Convert Pydantic model to dict for JSON storage
