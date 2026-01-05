@@ -32,6 +32,7 @@ import {
 import { mockRulePerformance } from '@/data/mockData';
 import { TriggeredClaim } from '@/types/fraud';
 import { cn } from '@/lib/utils';
+import { generateRulePerformancePDF, exportAnalyticsCSV } from '@/lib/pdfExport';
 import {
   LineChart,
   Line,
@@ -109,7 +110,10 @@ export default function RulePerformance() {
             <Eye className="w-4 h-4" />
             View Rule
           </Button>
-          <Button className="gap-2">
+          <Button
+            className="gap-2"
+            onClick={() => generateRulePerformancePDF(perf, timePeriod)}
+          >
             <Download className="w-4 h-4" />
             Export Report
           </Button>
@@ -511,7 +515,11 @@ export default function RulePerformance() {
             <Copy className="w-4 h-4" />
             Clone Rule
           </Button>
-          <Button variant="outline" className="gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => exportAnalyticsCSV(perf)}
+          >
             <Download className="w-4 h-4" />
             Export Analytics
           </Button>
