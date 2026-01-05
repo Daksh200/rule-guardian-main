@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 from .. import crud, models, schemas, database
 from ..services.rule_engine import evaluate_rule
 from datetime import datetime, timedelta
+from app.core.deps import require_admin
 
 router = APIRouter(
     prefix="/api/rules",

@@ -82,7 +82,21 @@ def delete_rule(db: Session, rule_id: int):
     return db_rule
 
 # --- Rule Version CRUD ---
-def create_rule_version(db: Session, rule_id: int, version: str, logic: dict, user_id: int, notes: str = "", is_active: bool = False):
+def create_rule_version(
+    db: Session,
+    rule_id: int,
+    version: str,
+    logic: dict,
+    user_id: int,
+    notes: str = "",
+    is_active: bool = False
+):
+    if is_active:
+        db.query(models.RuleVersion).filter(
+            models.RuleVersion.rule_id == rule_id,
+            models.RuleVersion.is_active == True
+        ).update({"is_active": False})
+
     db_version = models.RuleVersion(
         rule_id=rule_id,
         version=version,
@@ -91,6 +105,7 @@ def create_rule_version(db: Session, rule_id: int, version: str, logic: dict, us
         notes=notes,
         is_active=is_active
     )
+
     db.add(db_version)
     db.commit()
     db.refresh(db_version)
@@ -101,21 +116,48 @@ def get_rule_versions(db: Session, rule_id: int):
 
 # --- Analytics Helper Functions ---
 def get_rule_stats(db: Session, rule_id: int):
-    # This would normally aggregate real data from RuleExecutionLog
-    # For now, we'll simulate some of the aggregation logic based on the schema
-    
-    total_executions = db.query(models.RuleExecutionLog).filter(models.RuleExecutionLog.rule_id == rule_id).count()
-    
-    # Calculate triggers in last 24h
-    yesterday = datetime.now() - timedelta(days=1)
+    now = datetime.now()
+
+    # Calculate triggers in last 24h (only where execution_result = True)
+    yesterday = now - timedelta(days=1)
     triggers_24h = db.query(models.RuleExecutionLog).filter(
         models.RuleExecutionLog.rule_id == rule_id,
-        models.RuleExecutionLog.execution_date >= yesterday
+        models.RuleExecutionLog.executed_at >= yesterday,
+        models.RuleExecutionLog.execution_result == True
     ).count()
-    
+
+    # Calculate triggers in last 7 days
+    seven_days_ago = now - timedelta(days=7)
+    triggers_7d = db.query(models.RuleExecutionLog).filter(
+        models.RuleExecutionLog.rule_id == rule_id,
+        models.RuleExecutionLog.executed_at >= seven_days_ago,
+        models.RuleExecutionLog.execution_result == True
+    ).count()
+
+    # Calculate triggers in last 30 days
+    thirty_days_ago = now - timedelta(days=30)
+    triggers_30d = db.query(models.RuleExecutionLog).filter(
+        models.RuleExecutionLog.rule_id == rule_id,
+        models.RuleExecutionLog.executed_at >= thirty_days_ago,
+        models.RuleExecutionLog.execution_result == True
+    ).count()
+
+    # Severity distribution for triggered executions
+    severity_counts = db.query(
+        models.RuleExecutionLog.severity,
+        func.count(models.RuleExecutionLog.id)
+    ).filter(
+        models.RuleExecutionLog.rule_id == rule_id,
+        models.RuleExecutionLog.execution_result == True
+    ).group_by(models.RuleExecutionLog.severity).all()
+
+    severity_distribution = {severity: count for severity, count in severity_counts}
+
     return {
-        "total_executions": total_executions,
-        "triggers_24h": triggers_24h
+        "triggers_24h": triggers_24h,
+        "triggers_7d": triggers_7d,
+        "triggers_30d": triggers_30d,
+        "severity_distribution": severity_distribution
     }
 def get_active_rule_versions(db: Session):
     return db.query(models.RuleVersion).filter(
