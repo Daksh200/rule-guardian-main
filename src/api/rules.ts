@@ -37,3 +37,22 @@ export const updateRuleStatus = async (id: string, status: RuleStatus): Promise<
   const response = await axios.put(`${API_URL}/${id}`, { status });
   return response.data;
 };
+
+export const testRule = async (ruleData: any, payload: any): Promise<any> => {
+  try {
+    console.log('API call to test rule:', `${API_URL}/test`);
+    console.log('Rule data:', ruleData);
+    console.log('Payload:', payload);
+
+    const response = await axios.post(`${API_URL}/test`, ruleData, {
+      params: { payload: JSON.stringify(payload) },
+      timeout: 10000 // 10 second timeout
+    });
+
+    console.log('API response:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('API error in testRule:', error);
+    throw error; // Re-throw to let the component handle it
+  }
+};

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
+import json
 from .. import crud, models, schemas, database
 from ..services.rule_engine import evaluate_rule
 from datetime import datetime, timedelta
@@ -99,6 +100,40 @@ def read_rule_versions(rule_id: int, db: Session = Depends(get_db)):
     return versions
 
     return triggered_rules
+
+@router.post("/test")
+def test_rule(
+    rule_data: Dict[str, Any],
+    payload: str = None,
+    db: Session = Depends(get_db)
+):
+    try:
+        # Parse payload from query parameter if provided
+        test_payload = {}
+        if payload:
+            test_payload = json.loads(payload)
+
+        # Extract severity and logic from rule_data
+        severity = rule_data.get("severity", "medium")
+        logic = rule_data.get("groups", [])
+
+        # Create logic structure for evaluation
+        rule_logic = {
+            "severity": severity,
+            "groups": logic
+        }
+
+        # Evaluate the rule
+        result = evaluate_rule(rule_logic, test_payload, severity)
+
+        return {
+            "triggered": result["result"],
+            "severity": result["severity"],
+            "details": f"Rule evaluation completed with severity {result['severity']}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Test failed: {str(e)}")
+
 @router.post("/execute")
 def execute_rules(
     payload: Dict[str, Any],
