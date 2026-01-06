@@ -1,13 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routers import rules
-from app.routers import auth
+from .routers import auth
 
 app = FastAPI(title="Fraud Detection API")
 
 # CORS configuration
 origins = [
     "http://localhost:8080",
+    "http://localhost:8081",
     "http://localhost:5173",
     "http://localhost:3000",
 ]
