@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { FraudRule, RuleStatus } from '@/types/fraud';
+import { FraudRule, RuleStatus, TriggerTrend, SeverityDistribution, ConditionHit, TriggeredClaim, RuleLogic } from '@/types/fraud';
 
 const API_URL = 'http://localhost:8000/api/rules';
 
@@ -40,19 +40,68 @@ export const updateRuleStatus = async (id: string, status: RuleStatus): Promise<
 
 export const testRule = async (ruleData: any, payload: any): Promise<any> => {
   try {
-    console.log('API call to test rule:', `${API_URL}/test`);
-    console.log('Rule data:', ruleData);
-    console.log('Payload:', payload);
-
     const response = await axios.post(`${API_URL}/test`, ruleData, {
       params: { payload: JSON.stringify(payload) },
-      timeout: 10000 // 10 second timeout
+      timeout: 10000
     });
-
-    console.log('API response:', response.data);
     return response.data;
   } catch (error: any) {
-    console.error('API error in testRule:', error);
-    throw error; // Re-throw to let the component handle it
+    throw error;
   }
+};
+
+// Performance API
+export const getRuleKpis = async (ruleId: string, days: number) => {
+  const { data } = await axios.get(`${API_URL}/${ruleId}/performance/kpis`, { params: { days } });
+  return data as { totalClaimsEvaluated: number; flagsTriggered: number; confirmedFraud: number; falsePositiveRate: number; hitRate: number; lastEvaluated: string };
+};
+
+export const getRuleTrends = async (ruleId: string, days: number) => {
+  const { data } = await axios.get(`${API_URL}/${ruleId}/performance/trends`, { params: { days } });
+  return data as TriggerTrend[];
+};
+
+export const getRuleSeverity = async (ruleId: string, days: number) => {
+  const { data } = await axios.get(`${API_URL}/${ruleId}/performance/severity`, { params: { days } });
+  return data as SeverityDistribution;
+};
+
+export const getRuleConditions = async (ruleId: string, days: number) => {
+  const { data } = await axios.get(`${API_URL}/${ruleId}/performance/conditions`, { params: { days } });
+  return data as ConditionHit[];
+};
+
+export const getTriggeredClaims = async (
+  ruleId: string,
+  opts: { days: number; severity?: string; decision?: string; page?: number; pageSize?: number; sort?: string }
+) => {
+  const { days, severity, decision, page = 1, pageSize = 20, sort } = opts;
+  const skip = (page - 1) * pageSize;
+  const { data } = await axios.get(`${API_URL}/${ruleId}/performance/claims`, {
+    params: { days, severity, decision, skip, limit: pageSize, sort },
+  });
+  return data as { total: number; items: TriggeredClaim[] };
+};
+
+export const getDecisionCounts = async (ruleId: string, days: number) => {
+  const { data } = await axios.get(`${API_URL}/${ruleId}/performance/decisions`, { params: { days } });
+  return data as { fraud: number; legitimate: number; pending: number };
+};
+
+export const getExecution = async (executionId: string | number) => {
+  const { data } = await axios.get(`${API_URL}/executions/${executionId}`);
+  return data as any;
+};
+
+export const cloneRule = async (ruleId: string) => {
+  const { data } = await axios.post(`${API_URL}/${ruleId}/clone`);
+  return data as FraudRule;
+};
+
+export const publishRule = async (
+  ruleId: string,
+  payload: { name?: string; description?: string; category?: string; severity?: string; tags?: string[]; conditionSummary?: string; logic: RuleLogic; notes?: string; version?: string }
+) => {
+  const { data } = await axios.post(`${API_URL}/${ruleId}/publish`, payload);
+  return data as FraudRule;
 };

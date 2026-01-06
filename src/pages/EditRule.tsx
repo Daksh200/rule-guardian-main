@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Info, SlidersHorizontal, Lightbulb, Save, FlaskConical, Upload, AlertTriangle } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { LogicBuilder } from '@/components/rules/LogicBuilder';
@@ -10,59 +11,103 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ruleTypeOptions, severityOptions, admins, mockRules } from '@/data/mockData';
-import { ConditionGroup, RuleVersion } from '@/types/fraud';
+import { ruleTypeOptions, severityOptions, admins } from '@/data/mockData';
+import { ConditionGroup, RuleVersion, FraudRule } from '@/types/fraud';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { getRule, updateRule, testRule, publishRule } from '@/api/rules';
 
 export default function EditRule() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: rule } = useQuery({
+    queryKey: ['rule', id],
+    queryFn: () => getRule(id as string),
+    enabled: !!id,
+  });
   
-  const rule = mockRules.find((r) => r.id === id) || mockRules[0];
-  
-  const [ruleName, setRuleName] = useState(rule.name);
-  const [description, setDescription] = useState(rule.description);
-  const [ruleType, setRuleType] = useState(rule.category);
-  const [severity, setSeverity] = useState(rule.severity);
-  const [owner, setOwner] = useState(admins.find((a) => a.name === rule.owner)?.id || admins[0].id);
-  const [tags, setTags] = useState(rule.tags.join(', '));
-  const [logicGroups, setLogicGroups] = useState<ConditionGroup[]>(rule.logic.groups);
+  const [ruleName, setRuleName] = useState('');
+  const [description, setDescription] = useState('');
+  const [ruleType, setRuleType] = useState<'identity'|'transaction'|'geolocation'|'document'>('identity');
+  const [severity, setSeverity] = useState<'high'|'medium'|'low'>('low');
+  const [owner, setOwner] = useState(admins[0].id);
+  const [tags, setTags] = useState('');
+  const [logicGroups, setLogicGroups] = useState<ConditionGroup[]>([]);
   const [versionNotes, setVersionNotes] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  useEffect(() => {
+    if (rule) {
+      setRuleName(rule.name);
+      setDescription(rule.description);
+      setRuleType(rule.category);
+      setSeverity(rule.severity);
+      setTags((rule.tags || []).join(', '));
+      setLogicGroups(rule.logic.groups);
+    }
+  }, [rule]);
 
   const handleChange = () => {
     setHasUnsavedChanges(true);
   };
 
-  const handleSaveDraft = () => {
-    toast({
-      title: 'Draft Saved',
-      description: 'Your changes have been saved as a draft.',
-    });
-    setHasUnsavedChanges(false);
+  const handleSaveDraft = async () => {
+    if (!id) return;
+    try {
+      const payload: Partial<FraudRule> = {
+        name: ruleName,
+        description,
+        category: ruleType,
+        severity,
+        tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+        logic: { groups: logicGroups },
+      } as any;
+      await updateRule(id, payload);
+      queryClient.invalidateQueries({ queryKey: ['rule', id] });
+      setHasUnsavedChanges(false);
+      toast({ title: 'Draft Saved', description: 'Your changes have been saved.' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to save draft.', variant: 'destructive' });
+    }
   };
 
-  const handleTestRule = () => {
-    toast({
-      title: 'Testing Rule',
-      description: 'Running rule against last 100 claims...',
-    });
+  const handleTestRule = async () => {
+    try {
+      await testRule({ severity, groups: logicGroups }, {});
+      toast({ title: 'Testing Rule', description: 'Test executed.' });
+    } catch {
+      toast({ title: 'Error', description: 'Test failed.', variant: 'destructive' });
+    }
   };
 
-  const handlePublish = () => {
-    toast({
-      title: 'Changes Published',
-      description: `${ruleName} has been updated to v2.1.`,
-    });
-    navigate('/');
+  const handlePublish = async () => {
+    if (!id) return;
+    try {
+      const payload = {
+        name: ruleName,
+        description,
+        category: ruleType,
+        severity,
+        tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+        logic: { groups: logicGroups },
+        version: rule?.currentVersion || 'v1.0',
+        notes: versionNotes,
+      };
+      await publishRule(id, payload as any);
+      toast({ title: 'Changes Published', description: `${ruleName} published.` });
+      navigate('/');
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to publish changes.', variant: 'destructive' });
+    }
   };
 
   const handleDiscard = () => {
-    setRuleName(rule.name);
-    setDescription(rule.description);
-    setLogicGroups(rule.logic.groups);
+    setRuleName(rule?.name || '');
+    setDescription(rule?.description || '');
+    setLogicGroups(rule?.logic?.groups || []);
     setHasUnsavedChanges(false);
     toast({
       title: 'Changes Discarded',
@@ -85,12 +130,12 @@ export default function EditRule() {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold text-foreground">
-            Edit Rule: {rule.name}
+            Edit Rule: {rule?.name || ''}
           </h1>
           <div className="flex items-center gap-2">
-            <StatusBadge status={rule.status} />
+            <StatusBadge status={rule?.status || 'draft'} />
             <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">
-              {rule.currentVersion}
+              {rule?.currentVersion || ''}
             </span>
           </div>
         </div>
@@ -144,7 +189,7 @@ export default function EditRule() {
                   </Label>
                   <Input
                     disabled
-                    value={rule.ruleId}
+                    value={rule?.ruleId || ''}
                     className="bg-muted/30"
                   />
                 </div>
@@ -272,7 +317,7 @@ export default function EditRule() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {rule.versions.map((version: RuleVersion, index: number) => (
+              {(rule?.versions || []).map((version: RuleVersion, index: number) => (
                 <div
                   key={version.id}
                   className={cn(

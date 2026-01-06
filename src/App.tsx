@@ -7,6 +7,7 @@ import FraudRulesEngine from "./pages/FraudRulesEngine";
 import CreateRule from "./pages/CreateRule";
 import EditRule from "./pages/EditRule";
 import RulePerformance from "./pages/RulePerformance";
+import ClaimDetail from "./pages/ClaimDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/rules/create" element={<CreateRule />} />
           <Route path="/rules/:id/edit" element={<EditRule />} />
           <Route path="/rule-performance" element={<RulePerformance />} />
+          <Route path="/claims/:id" element={<ClaimDetail />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

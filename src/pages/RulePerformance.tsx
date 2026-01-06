@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+
 import {
   Eye,
   Download,
@@ -29,8 +31,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { mockRulePerformance } from '@/data/mockData';
 import { TriggeredClaim } from '@/types/fraud';
+import { getRule, getRuleConditions, getRuleKpis, getRuleSeverity, getRuleTrends, getTriggeredClaims, getDecisionCounts, cloneRule } from '@/api/rules';
+
 import { cn } from '@/lib/utils';
 import { generateRulePerformancePDF, exportAnalyticsCSV } from '@/lib/pdfExport';
 import {
@@ -49,11 +52,63 @@ import {
 
 export default function RulePerformance() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const ruleId = searchParams.get('id') || '1';
   const [timePeriod, setTimePeriod] = useState<'30' | '90'>('30');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [decisionFilter, setDecisionFilter] = useState('all');
-  
-  const perf = mockRulePerformance;
+  const [page, setPage] = useState(1);
+
+  const { data: rule } = useQuery({
+    queryKey: ['rule', ruleId],
+    queryFn: () => getRule(ruleId),
+  });
+
+  const { data: kpis } = useQuery({
+    queryKey: ['kpis', ruleId, timePeriod],
+    queryFn: () => getRuleKpis(ruleId, parseInt(timePeriod)),
+  });
+
+  const { data: trends } = useQuery({
+    queryKey: ['trends', ruleId, timePeriod],
+    queryFn: () => getRuleTrends(ruleId, parseInt(timePeriod)),
+  });
+
+  const { data: severity } = useQuery({
+    queryKey: ['severity', ruleId, timePeriod],
+    queryFn: () => getRuleSeverity(ruleId, parseInt(timePeriod)),
+  });
+
+  const { data: conditions } = useQuery({
+    queryKey: ['conditions', ruleId, timePeriod],
+    queryFn: () => getRuleConditions(ruleId, parseInt(timePeriod)),
+  });
+
+  const { data: claims } = useQuery({
+    queryKey: ['claims', ruleId, timePeriod, severityFilter, decisionFilter, page],
+    queryFn: () => getTriggeredClaims(ruleId, { days: parseInt(timePeriod), severity: severityFilter, decision: decisionFilter, page, pageSize: 20, sort: 'date_desc' }),
+  });
+
+  const { data: decisions } = useQuery({
+    queryKey: ['decisionCounts', ruleId, timePeriod],
+    queryFn: () => getDecisionCounts(ruleId, parseInt(timePeriod)),
+  });
+
+  const perf = useMemo(() => ({
+    ruleId: rule?.rule_id ?? '',
+    ruleName: rule?.name ?? '',
+    totalClaimsEvaluated: kpis?.totalClaimsEvaluated ?? 0,
+    flagsTriggered: kpis?.flagsTriggered ?? 0,
+    confirmedFraud: kpis?.confirmedFraud ?? 0,
+    falsePositiveRate: kpis?.falsePositiveRate ?? 0,
+    hitRate: kpis?.hitRate ?? 0,
+    lastEvaluated: kpis?.lastEvaluated ?? '',
+    version: rule?.currentVersion ?? '',
+    triggerTrends: trends ?? [],
+    severityDistribution: severity ?? { high: 0, medium: 0, low: 0 },
+    conditionHitMap: conditions ?? [],
+    triggeredClaims: claims?.items ?? [],
+  }), [rule, kpis, trends, severity, conditions, claims]);
 
   const pieData = [
     { name: 'High', value: perf.severityDistribution.high, color: 'hsl(0, 84%, 60%)' },
@@ -106,7 +161,7 @@ export default function RulePerformance() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => navigate(`/rules/${ruleId}/edit`)}>
             <Eye className="w-4 h-4" />
             View Rule
           </Button>
@@ -136,7 +191,7 @@ export default function RulePerformance() {
               </div>
             </div>
             <span className="absolute top-3 right-3 text-xs text-muted-foreground">
-              Last 30 Days
+            Last {timePeriod} Days
             </span>
           </CardContent>
         </Card>
@@ -230,7 +285,7 @@ export default function RulePerformance() {
         <CardContent className="pt-4">
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={perf.triggerTrends.slice(0, parseInt(timePeriod))}>
+              <LineChart data={perf.triggerTrends}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis
                   dataKey="day"
@@ -304,7 +359,7 @@ export default function RulePerformance() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {perf.conditionHitMap.map((item) => (
+            {(perf.conditionHitMap || []).map((item) => (
               <div key={item.condition} className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">{item.condition}</span>
@@ -350,14 +405,14 @@ export default function RulePerformance() {
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-xs text-muted-foreground uppercase">Total</span>
-                <span className="text-2xl font-bold">{perf.flagsTriggered}</span>
+                <span className="text-2xl font-bold">{perf.severityDistribution.high + perf.severityDistribution.medium + perf.severityDistribution.low}</span>
               </div>
             </div>
             <div className="flex items-center justify-center gap-4 mt-2">
               {pieData.map((item) => (
                 <div key={item.name} className="flex items-center gap-1.5 text-xs">
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                  {item.name} {item.value}%
+                  {item.name} {item.value}
                 </div>
               ))}
             </div>
@@ -373,32 +428,32 @@ export default function RulePerformance() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-destructive/5 border border-destructive/10">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-destructive/5 border border-destructive/10 cursor-pointer" onClick={() => { setDecisionFilter('fraud'); setPage(1); }}>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded bg-destructive/10 flex items-center justify-center">
                   <X className="w-4 h-4 text-destructive" />
                 </div>
                 <span className="text-sm">Marked as Fraud</span>
               </div>
-              <span className="text-lg font-bold text-destructive">56</span>
+              <span className="text-lg font-bold text-destructive">{decisions?.fraud ?? 0}</span>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-success/5 border border-success/10">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-success/5 border border-success/10 cursor-pointer" onClick={() => { setDecisionFilter('legitimate'); setPage(1); }}>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded bg-success/10 flex items-center justify-center">
                   <Check className="w-4 h-4 text-success" />
                 </div>
                 <span className="text-sm">Marked Legitimate</span>
               </div>
-              <span className="text-lg font-bold text-success">80</span>
+              <span className="text-lg font-bold text-success">{decisions?.legitimate ?? 0}</span>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-muted border border-border">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-muted border border-border cursor-pointer" onClick={() => { setDecisionFilter('pending'); setPage(1); }}>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded bg-muted flex items-center justify-center">
                   <Clock className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <span className="text-sm">Review Pending</span>
               </div>
-              <span className="text-lg font-bold">158</span>
+              <span className="text-lg font-bold">{decisions?.pending ?? 0}</span>
             </div>
           </CardContent>
         </Card>
@@ -437,7 +492,7 @@ export default function RulePerformance() {
                   <SelectItem value="legitimate">Legitimate</SelectItem>
                 </SelectContent>
               </Select>
-              <Select defaultValue="30">
+              <Select value={timePeriod} onValueChange={(v) => { setTimePeriod(v as any); setPage(1); }}>
                 <SelectTrigger className="w-32 h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
@@ -463,8 +518,8 @@ export default function RulePerformance() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {perf.triggeredClaims.map((claim: TriggeredClaim) => (
-                <TableRow key={claim.id}>
+              {(perf.triggeredClaims || []).map((claim: TriggeredClaim) => (
+                <TableRow key={claim.id} className="cursor-pointer" onClick={() => navigate(`/claims/${claim.id}`)}>
                   <TableCell className="font-medium text-primary">{claim.claimId}</TableCell>
                   <TableCell className="text-muted-foreground">{claim.date}</TableCell>
                   <TableCell>
@@ -496,10 +551,14 @@ export default function RulePerformance() {
               ))}
             </TableBody>
           </Table>
-          <div className="text-center pt-4">
-            <Button variant="link" className="text-primary">
-              View All Matches
-            </Button>
+          <div className="flex items-center justify-between pt-4">
+            <div className="text-sm text-muted-foreground">
+              Page {page} • {claims?.total ?? 0} results
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
+              <Button variant="outline" size="sm" disabled={(page * 20) >= (claims?.total ?? 0)} onClick={() => setPage((p) => p + 1)}>Next</Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -510,8 +569,8 @@ export default function RulePerformance() {
           Actions for Current Rule
         </span>
         <div className="flex items-center gap-3">
-          <Button variant="ghost">Close</Button>
-          <Button variant="outline" className="gap-2">
+          <Button variant="ghost" onClick={() => navigate(-1)}>Close</Button>
+          <Button variant="outline" className="gap-2" onClick={async () => { const newRule = await cloneRule(ruleId); navigate(`/rules/${newRule.id}/edit`); }}>
             <Copy className="w-4 h-4" />
             Clone Rule
           </Button>
@@ -523,7 +582,7 @@ export default function RulePerformance() {
             <Download className="w-4 h-4" />
             Export Analytics
           </Button>
-          <Button onClick={() => navigate('/rules/5/edit')} className="gap-2">
+          <Button onClick={() => navigate(`/rules/${ruleId}/edit`)} className="gap-2">
             <Pencil className="w-4 h-4" />
             Edit Rule
           </Button>

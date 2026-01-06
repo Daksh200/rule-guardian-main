@@ -6,6 +6,7 @@ from .. import crud, models, schemas, database
 from ..services.rule_engine import evaluate_rule
 from datetime import datetime, timedelta
 from app.core.deps import require_admin
+from fastapi import Query
 
 router = APIRouter(
     prefix="/api/rules",
@@ -22,9 +23,8 @@ def get_db():
 
 @router.post("/", response_model=schemas.Rule)
 def create_rule(rule: schemas.RuleCreate, db: Session = Depends(get_db)):
-    # In a real app, we'd get the current user from the token
-    # For now, we'll assume user ID 1 exists (we'll create it in seed data)
-    user_id = 1 
+    # user_id can be None if not authenticated; avoid FK errors
+    user_id = 1 if crud.get_user(db, 1) else None
     return crud.create_rule(db=db, rule=rule, user_id=user_id)
 
 @router.get("/", response_model=List[schemas.Rule])
@@ -99,8 +99,6 @@ def read_rule_versions(rule_id: int, db: Session = Depends(get_db)):
     versions = crud.get_rule_versions(db, rule_id=rule_id)
     return versions
 
-    return triggered_rules
-
 @router.post("/test")
 def test_rule(
     rule_data: Dict[str, Any],
@@ -162,3 +160,81 @@ def execute_rules(
             })
 
     return triggered_rules
+
+# --- Performance Endpoints ---
+@router.get("/{rule_id}/performance/kpis")
+def performance_kpis(rule_id: int, days: int = 30, db: Session = Depends(get_db)):
+    rule = crud.get_rule(db, rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return crud.get_rule_performance_kpis(db, rule_id, days)
+
+@router.get("/{rule_id}/performance/trends")
+def performance_trends(rule_id: int, days: int = 30, db: Session = Depends(get_db)):
+    return crud.get_trigger_trends(db, rule_id, days)
+
+@router.get("/{rule_id}/performance/severity")
+def performance_severity(rule_id: int, days: int = 30, db: Session = Depends(get_db)):
+    return crud.get_severity_distribution(db, rule_id, days)
+
+@router.get("/{rule_id}/performance/conditions")
+def performance_conditions(rule_id: int, days: int = 30, db: Session = Depends(get_db)):
+    return crud.get_condition_hit_map(db, rule_id, days)
+
+@router.get("/{rule_id}/performance/claims")
+def performance_claims(
+    rule_id: int,
+    days: int = 30,
+    severity: str | None = None,
+    decision: str | None = None,
+    skip: int = 0,
+    limit: int = 20,
+    sort: str | None = None,
+    db: Session = Depends(get_db)
+):
+    return crud.get_triggered_claims(db, rule_id, days, severity, decision, skip, limit, sort)
+
+@router.get("/{rule_id}/performance/decisions")
+def performance_decisions(rule_id: int, days: int = 30, db: Session = Depends(get_db)):
+    return crud.get_decision_counts(db, rule_id, days)
+
+@router.get("/executions/{execution_id}")
+def get_execution(execution_id: int, db: Session = Depends(get_db)):
+    data = crud.get_execution_by_id(db, execution_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return data
+
+@router.post("/{rule_id}/clone", response_model=schemas.Rule)
+def clone_rule(rule_id: int, db: Session = Depends(get_db)):
+    user_id = 1
+    cloned = crud.clone_rule(db, rule_id, user_id)
+    if not cloned:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return cloned
+
+@router.post("/{rule_id}/publish", response_model=schemas.Rule)
+def publish_rule(rule_id: int, payload: Dict[str, Any], db: Session = Depends(get_db)):
+    db_rule = crud.get_rule(db, rule_id)
+    if not db_rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    # Update rule fields if provided
+    update_fields = {}
+    for field in ["name", "description", "category", "severity", "status", "tags", "conditionSummary", "logic"]:
+        if field in payload and payload[field] is not None:
+            update_fields[field] = payload[field]
+
+    if update_fields:
+        # Use RuleUpdate model for validation
+        update_model = schemas.RuleUpdate(**update_fields)
+        db_rule = crud.update_rule(db, rule_id=rule_id, rule_update=update_model)
+
+    # Create a new active version
+    version = payload.get("version") or "v1.0"
+    notes = payload.get("notes") or ""
+    user_id = 1 if crud.get_user(db, 1) else None
+    # Refresh rule to get latest logic
+    db_rule = crud.get_rule(db, rule_id)
+    crud.create_rule_version(db, rule_id, version, db_rule.logic, user_id, notes=notes, is_active=True)
+    return db_rule
