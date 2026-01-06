@@ -25,7 +25,26 @@ def get_db():
 def create_rule(rule: schemas.RuleCreate, db: Session = Depends(get_db)):
     # user_id can be None if not authenticated; avoid FK errors
     user_id = 1 if crud.get_user(db, 1) else None
-    return crud.create_rule(db=db, rule=rule, user_id=user_id)
+    created = crud.create_rule(db=db, rule=rule, user_id=user_id)
+    try:
+        crud.log_audit(
+            db,
+            action=models.AuditAction.created_rule,
+            entity_type=models.AuditEntityType.rule,
+            entity_id=created.id,
+            entity_label=created.name,
+            metadata={
+                "rule_id": created.rule_id,
+                "category": str(created.category),
+                "severity": str(created.severity),
+                "status": str(created.status),
+            },
+            actor_id=user_id,
+            actor_email="system",
+        )
+    except Exception:
+        pass
+    return created
 
 @router.get("/", response_model=List[schemas.Rule])
 def read_rules(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -85,6 +104,18 @@ def update_rule(rule_id: int, rule: schemas.RuleUpdate, db: Session = Depends(ge
     db_rule = crud.update_rule(db, rule_id=rule_id, rule_update=rule)
     if db_rule is None:
         raise HTTPException(status_code=404, detail="Rule not found")
+    try:
+        crud.log_audit(
+            db,
+            action=models.AuditAction.updated_rule,
+            entity_type=models.AuditEntityType.rule,
+            entity_id=rule_id,
+            entity_label=db_rule.name if db_rule else None,
+            metadata={"updated_fields": list(rule.model_dump(exclude_unset=True).keys())},
+            actor_email="system",
+        )
+    except Exception:
+        pass
     return db_rule
 
 @router.delete("/{rule_id}", response_model=schemas.Rule)
@@ -92,6 +123,18 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db)):
     db_rule = crud.delete_rule(db, rule_id=rule_id)
     if db_rule is None:
         raise HTTPException(status_code=404, detail="Rule not found")
+    try:
+        crud.log_audit(
+            db,
+            action=models.AuditAction.deleted_rule,
+            entity_type=models.AuditEntityType.rule,
+            entity_id=rule_id,
+            entity_label=db_rule.name if db_rule else None,
+            metadata={"rule_id": db_rule.rule_id if db_rule else None},
+            actor_email="system",
+        )
+    except Exception:
+        pass
     return db_rule
 
 @router.get("/{rule_id}/versions", response_model=List[schemas.RuleVersion])
@@ -123,6 +166,19 @@ def test_rule(
 
         # Evaluate the rule
         result = evaluate_rule(rule_logic, test_payload, severity)
+
+        try:
+            crud.log_audit(
+                db,
+                action=models.AuditAction.tested_rule,
+                entity_type=models.AuditEntityType.rule,
+                entity_id=None,
+                entity_label=None,
+                metadata={"severity": severity, "groups": len(logic), "triggered": bool(result.get("result"))},
+                actor_email="system",
+            )
+        except Exception:
+            pass
 
         return {
             "triggered": result["result"],
@@ -158,6 +214,19 @@ def execute_rules(
                 "rule_version_id": version.id,
                 "severity": result["severity"]
             })
+
+    try:
+        crud.log_audit(
+            db,
+            action=models.AuditAction.executed_rule,
+            entity_type=models.AuditEntityType.rule,
+            entity_id=None,
+            entity_label=None,
+            metadata={"total_active_rules": len(active_versions), "triggered": len(triggered_rules)},
+            actor_email="system",
+        )
+    except Exception:
+        pass
 
     return triggered_rules
 
@@ -211,6 +280,19 @@ def clone_rule(rule_id: int, db: Session = Depends(get_db)):
     cloned = crud.clone_rule(db, rule_id, user_id)
     if not cloned:
         raise HTTPException(status_code=404, detail="Rule not found")
+    try:
+        crud.log_audit(
+            db,
+            action=models.AuditAction.cloned_rule,
+            entity_type=models.AuditEntityType.rule,
+            entity_id=cloned.id,
+            entity_label=cloned.name,
+            metadata={"source_rule_id": rule_id, "new_rule_id": cloned.id, "new_rule_code": cloned.rule_id},
+            actor_id=user_id,
+            actor_email="system",
+        )
+    except Exception:
+        pass
     return cloned
 
 @router.post("/{rule_id}/publish", response_model=schemas.Rule)
@@ -237,4 +319,19 @@ def publish_rule(rule_id: int, payload: Dict[str, Any], db: Session = Depends(ge
     # Refresh rule to get latest logic
     db_rule = crud.get_rule(db, rule_id)
     crud.create_rule_version(db, rule_id, version, db_rule.logic, user_id, notes=notes, is_active=True)
+
+    try:
+        crud.log_audit(
+            db,
+            action=models.AuditAction.published_version,
+            entity_type=models.AuditEntityType.rule,
+            entity_id=rule_id,
+            entity_label=db_rule.name if db_rule else None,
+            metadata={"version": version, "notes": notes},
+            actor_id=user_id,
+            actor_email="system",
+        )
+    except Exception:
+        pass
+
     return db_rule

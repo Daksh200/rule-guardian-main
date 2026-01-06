@@ -29,6 +29,24 @@ class Decision(str, enum.Enum):
     fraud = "fraud"
     legitimate = "legitimate"
 
+class AuditAction(str, enum.Enum):
+    created_rule = "created_rule"
+    updated_rule = "updated_rule"
+    deleted_rule = "deleted_rule"
+    status_changed = "status_changed"
+    published_version = "published_version"
+    cloned_rule = "cloned_rule"
+    executed_rule = "executed_rule"
+    tested_rule = "tested_rule"
+    logged_in = "logged_in"
+    logged_out = "logged_out"
+
+class AuditEntityType(str, enum.Enum):
+    rule = "rule"
+    rule_version = "rule_version"
+    execution = "execution"
+    user = "user"
+
 class User(Base):
     __tablename__ = "users"
 
@@ -103,3 +121,18 @@ class RuleExecutionLog(Base):
 
     rule = relationship("Rule", back_populates="executions")
     rule_version = relationship("RuleVersion", back_populates="executions")
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    actor_email = Column(String, nullable=True)
+    action = Column(Enum(AuditAction), nullable=False)
+    entity_type = Column(Enum(AuditEntityType), nullable=False)
+    entity_id = Column(String, nullable=True)
+    entity_label = Column(String, nullable=True)
+    details = Column(JSON)
+
+    actor = relationship("User")

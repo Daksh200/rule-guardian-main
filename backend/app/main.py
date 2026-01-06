@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routers import rules
 from .routers import auth
+from .routers import audit
 
 app = FastAPI(title="Fraud Detection API")
 
@@ -23,6 +24,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(rules.router)
+app.include_router(audit.router)
 
 @app.get("/")
 def read_root():

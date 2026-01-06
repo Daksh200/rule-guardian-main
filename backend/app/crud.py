@@ -401,3 +401,80 @@ def create_execution_log(
     db.commit()
     db.refresh(log)
     return log
+
+# --- Audit Log CRUD ---
+
+def log_audit(
+    db: Session,
+    action: models.AuditAction,
+    entity_type: models.AuditEntityType,
+    entity_id: str | int | None = None,
+    entity_label: str | None = None,
+    metadata: dict | None = None,
+    actor_id: int | None = None,
+    actor_email: str | None = None,
+):
+    entry = models.AuditLog(
+        action=action,
+        entity_type=entity_type,
+        entity_id=str(entity_id) if entity_id is not None else None,
+        entity_label=entity_label,
+        details=metadata or {},
+        actor_id=actor_id,
+        actor_email=actor_email,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+def get_audit_logs(
+    db: Session,
+    page: int = 1,
+    limit: int = 20,
+    action: str | None = None,
+    entity_type: str | None = None,
+    actor_email: str | None = None,
+    entity_id: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+):
+    q = db.query(models.AuditLog)
+
+    if action:
+        try:
+            q = q.filter(models.AuditLog.action == models.AuditAction(action))
+        except Exception:
+            q = q.filter(models.AuditLog.action == None)  # no results
+    if entity_type:
+        try:
+            q = q.filter(models.AuditLog.entity_type == models.AuditEntityType(entity_type))
+        except Exception:
+            q = q.filter(models.AuditLog.entity_type == None)
+    if actor_email:
+        q = q.filter(models.AuditLog.actor_email == actor_email)
+    if entity_id:
+        q = q.filter(models.AuditLog.entity_id == entity_id)
+    if date_from:
+        q = q.filter(models.AuditLog.created_at >= date_from)
+    if date_to:
+        q = q.filter(models.AuditLog.created_at <= date_to)
+
+    total = q.count()
+    rows = q.order_by(desc(models.AuditLog.created_at)).offset((page - 1) * limit).limit(limit).all()
+
+    def serialize(e: models.AuditLog):
+        return {
+            'id': e.id,
+            'created_at': e.created_at.isoformat() if e.created_at else None,
+            'actor_id': e.actor_id,
+            'actor_email': e.actor_email,
+            'action': str(e.action),
+            'entity_type': str(e.entity_type),
+            'entity_id': e.entity_id,
+            'entity_label': e.entity_label,
+            'metadata': e.details or {},
+        }
+
+    return { 'total': total, 'items': [serialize(r) for r in rows] }

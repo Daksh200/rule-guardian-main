@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, History, Layers, FileText, Bell, BarChart3, Filter, ArrowUpDown } from 'lucide-react';
+import { AuditLogDrawer } from '@/components/audit/AuditLogDrawer';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/rules/StatCard';
@@ -21,6 +22,7 @@ export default function FraudRulesEngine() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [auditOpen, setAuditOpen] = useState(false);
 
   const { data: rules = [], isLoading, error } = useQuery({
     queryKey: ['rules'],
@@ -112,7 +114,7 @@ export default function FraudRulesEngine() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setAuditOpen(true)}>
             <History className="w-4 h-4" />
             Audit Log
           </Button>
@@ -197,6 +199,7 @@ export default function FraudRulesEngine() {
         onDelete={handleDelete}
         onStatusChange={handleStatusChange}
       />
+    <AuditLogDrawer open={auditOpen} onOpenChange={setAuditOpen} />
     </MainLayout>
   );
 }
