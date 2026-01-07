@@ -48,7 +48,6 @@ const navigation: NavSection[] = [
     items: [
       { icon: SlidersHorizontal, label: 'Fraud Rules Engine', href: '/' },
       { icon: TrendingUp, label: 'Rule Performance', href: '/rule-performance' },
-      { icon: Brain, label: 'AI & Model Monitoring', href: '/ai-monitoring' },
     ],
   },
   {
