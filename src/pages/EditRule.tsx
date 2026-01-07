@@ -141,10 +141,16 @@ export default function EditRule() {
   const handlePublish = async () => {
     if (!id) return;
     try {
-      // Determine next version number (simple increment logic for demo)
-      const currentVer = rule?.currentVersion || 'v1.0';
-      const verNum = parseInt(currentVer.replace('v', '').replace('.', '')) + 1;
-      const nextVersion = `v${Math.floor(verNum/10)}.${verNum%10}`; // e.g. v1.1
+      // Robustly increment semantic-like versions 'v<major>.<minor>'
+      const currentVer = (rule?.currentVersion || 'v1.0').trim();
+      const m = /^v(\d+)\.(\d+)$/.exec(currentVer);
+      let nextVersion = 'v1.1';
+      if (m) {
+        const major = parseInt(m[1], 10);
+        const minor = parseInt(m[2], 10);
+        // Increment minor by 1 (no rollover policy unless desired)
+        nextVersion = `v${major}.${minor + 1}`;
+      }
 
       const payload = {
         name: ruleName,
@@ -318,7 +324,7 @@ export default function EditRule() {
                   </Label>
                   <Input
                     disabled
-                    value={rule?.ruleId || ''}
+                    value={rule?.ruleId || rule?.rule_id || ''}
                     className="bg-muted/30"
                   />
                 </div>

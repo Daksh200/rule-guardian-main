@@ -53,7 +53,7 @@ import {
 export default function RulePerformance() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const ruleId = searchParams.get('id') || '1';
+  const ruleId = searchParams.get('id') || '12';
   const [timePeriod, setTimePeriod] = useState<'30' | '90'>('30');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [decisionFilter, setDecisionFilter] = useState('all');
@@ -94,27 +94,47 @@ export default function RulePerformance() {
     queryFn: () => getDecisionCounts(ruleId, parseInt(timePeriod)),
   });
 
-  const perf = useMemo(() => ({
-    ruleId: rule?.rule_id ?? '',
-    ruleName: rule?.name ?? '',
-    totalClaimsEvaluated: kpis?.totalClaimsEvaluated ?? 0,
-    flagsTriggered: kpis?.flagsTriggered ?? 0,
-    confirmedFraud: kpis?.confirmedFraud ?? 0,
-    falsePositiveRate: kpis?.falsePositiveRate ?? 0,
-    hitRate: kpis?.hitRate ?? 0,
-    lastEvaluated: kpis?.lastEvaluated ?? '',
-    version: rule?.currentVersion ?? '',
-    triggerTrends: trends ?? [],
-    severityDistribution: severity ?? { high: 0, medium: 0, low: 0 },
-    conditionHitMap: conditions ?? [],
-    triggeredClaims: claims?.items ?? [],
-  }), [rule, kpis, trends, severity, conditions, claims]);
+  const perf = useMemo(() => {
+    const total = kpis?.totalClaimsEvaluated ?? 0;
+    const flags = kpis?.flagsTriggered ?? 0;
+    const confirmed = kpis?.confirmedFraud ?? 0;
+
+    // Backend-provided values (assumed 0–100). If invalid or missing, compute fallbacks.
+    const rawHit = typeof kpis?.hitRate === 'number' ? kpis!.hitRate : undefined;
+    const rawFpr = typeof kpis?.falsePositiveRate === 'number' ? kpis!.falsePositiveRate : undefined;
+
+    const computedHit = total > 0 ? (100 * flags / total) : 0;
+    const computedFpr = flags > 0 ? (100 * Math.max(flags - confirmed, 0) / flags) : 0;
+
+    const hitRateVal = Number.isFinite(rawHit!) && rawHit! >= 0 && rawHit! <= 100 ? rawHit! : computedHit;
+    const fprVal = Number.isFinite(rawFpr!) && rawFpr! >= 0 && rawFpr! <= 100 ? rawFpr! : computedFpr;
+
+    const formatPct = (v: number) => Math.min(100, Math.max(0, Number(v.toFixed(2))));
+
+    return {
+      ruleId: rule?.rule_id ?? '',
+      ruleName: rule?.name ?? '',
+      totalClaimsEvaluated: total,
+      flagsTriggered: flags,
+      confirmedFraud: confirmed,
+      falsePositiveRate: formatPct(fprVal),
+      hitRate: formatPct(hitRateVal),
+      lastEvaluated: kpis?.lastEvaluated ?? '',
+      version: rule?.currentVersion ?? '',
+      triggerTrends: trends ?? [],
+      severityDistribution: severity ?? { high: 0, medium: 0, low: 0 },
+      conditionHitMap: conditions ?? [],
+      triggeredClaims: claims?.items ?? [],
+    };
+  }, [rule, kpis, trends, severity, conditions, claims]);
 
   const pieData = [
     { name: 'High', value: perf.severityDistribution.high, color: 'hsl(0, 84%, 60%)' },
     { name: 'Med', value: perf.severityDistribution.medium, color: 'hsl(38, 92%, 50%)' },
     { name: 'Low', value: perf.severityDistribution.low, color: 'hsl(142, 76%, 36%)' },
   ];
+  const severitySum = (perf.severityDistribution.high || 0) + (perf.severityDistribution.medium || 0) + (perf.severityDistribution.low || 0);
+  const severityIsPercentage = severitySum >= 99 && severitySum <= 101;
 
   const getDecisionIcon = (decision: string) => {
     switch (decision) {
@@ -405,7 +425,7 @@ export default function RulePerformance() {
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-xs text-muted-foreground uppercase">Total</span>
-                <span className="text-2xl font-bold">{perf.severityDistribution.high + perf.severityDistribution.medium + perf.severityDistribution.low}</span>
+                <span className="text-2xl font-bold">{severityIsPercentage ? '100%' : severitySum}</span>
               </div>
             </div>
             <div className="flex items-center justify-center gap-4 mt-2">
@@ -519,8 +539,8 @@ export default function RulePerformance() {
             </TableHeader>
             <TableBody>
               {(perf.triggeredClaims || []).map((claim: TriggeredClaim) => (
-                <TableRow key={claim.id} className="cursor-pointer" onClick={() => navigate(`/claims/${claim.id}`)}>
-                  <TableCell className="font-medium text-primary">{claim.claimId}</TableCell>
+                <TableRow key={claim.id || claim.claimId} className="cursor-pointer" onClick={() => navigate(`/claims/${claim.id || claim.claimId}`)}>
+                  <TableCell className="font-medium text-primary">{claim.claimId || claim.id}</TableCell>
                   <TableCell className="text-muted-foreground">{claim.date}</TableCell>
                   <TableCell>
                     <span

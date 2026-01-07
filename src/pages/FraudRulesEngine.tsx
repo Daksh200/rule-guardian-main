@@ -7,6 +7,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/rules/StatCard';
 import { RulesTable } from '@/components/rules/RulesTable';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { categoryOptions } from '@/data/mockData';
@@ -23,6 +24,7 @@ export default function FraudRulesEngine() {
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [auditOpen, setAuditOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<'nameAsc'|'nameDesc'|'updatedDesc'|'updatedAsc'>('updatedDesc');
 
   const { data: rules = [], isLoading, error } = useQuery({
     queryKey: ['rules'],
@@ -70,23 +72,31 @@ export default function FraudRulesEngine() {
   const stats = useMemo(() => ({
     activeRules: rules.filter((r) => r.status === 'active').length,
     drafts: rules.filter((r) => r.status === 'draft').length,
-    triggered24h: rules.reduce((sum, r) => sum + r.triggers24h, 0),
-    avgFraudScore: 45,
+    triggered24h: rules.reduce((sum, r) => sum + (r.triggers24h || 0), 0),
+    avgFraudScore: 'N/A',
   }), [rules]);
 
   const filteredRules = useMemo(() => {
-    return rules.filter((rule) => {
+    const base = rules.filter((rule) => {
       const tabMatch =
         activeTab === 'all' ||
         (activeTab === 'active' && rule.status === 'active') ||
         (activeTab === 'inactive' && rule.status === 'inactive') ||
         (activeTab === 'draft' && rule.status === 'draft');
-      
       const categoryMatch = categoryFilter === 'all' || rule.category === categoryFilter;
-      
       return tabMatch && categoryMatch;
     });
-  }, [rules, activeTab, categoryFilter]);
+    const sorted = [...base].sort((a, b) => {
+      switch (sortBy) {
+        case 'nameAsc': return a.name.localeCompare(b.name);
+        case 'nameDesc': return b.name.localeCompare(a.name);
+        case 'updatedAsc': return new Date(a.lastUpdated).getTime() - new Date(b.lastUpdated).getTime();
+        case 'updatedDesc':
+        default: return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
+      }
+    });
+    return sorted;
+  }, [rules, activeTab, categoryFilter, sortBy]);
 
   const handleStatusChange = (rule: FraudRule, status: RuleStatus) => {
     updateStatusMutation.mutate({ id: rule.id, status });
@@ -151,7 +161,7 @@ export default function FraudRulesEngine() {
         <StatCard
           label="Avg Fraud Score"
           value={stats.avgFraudScore}
-          subtitle="/100"
+          subtitle={stats.avgFraudScore === 'N/A' ? undefined : '/100'}
           icon={BarChart3}
           iconBgColor="bg-info/10"
           iconColor="text-info"
@@ -185,10 +195,20 @@ export default function FraudRulesEngine() {
             </SelectContent>
           </Select>
 
-          <Button variant="outline" size="sm" className="gap-2">
-            <ArrowUpDown className="w-4 h-4" />
-            Sort
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <ArrowUpDown className="w-4 h-4" />
+                Sort
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setSortBy('updatedDesc')}>Last Updated: Newest</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortBy('updatedAsc')}>Last Updated: Oldest</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortBy('nameAsc')}>Name: A → Z</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortBy('nameDesc')}>Name: Z → A</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

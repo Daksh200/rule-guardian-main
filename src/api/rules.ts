@@ -15,8 +15,13 @@ export const getRules = async (): Promise<FraudRule[]> => {
 };
 
 export const getRule = async (id: string): Promise<FraudRule> => {
-  const response = await axios.get(`${API_URL}/${id}`);
-  return response.data;
+  const { data } = await axios.get(`${API_URL}/${id}`);
+  return {
+    ...data,
+    id: data?.id != null ? data.id.toString() : data?.id,
+    ruleId: data?.ruleId ?? data?.rule_id,
+    owner: data?.owner ?? data?.ownerName,
+  } as FraudRule;
 };
 
 export const createRule = async (rule: Partial<FraudRule>): Promise<FraudRule> => {
@@ -50,10 +55,7 @@ export const updateRuleVersionNotes = async (versionId: string, notes: string): 
 
 export const testRule = async (ruleData: any, payload: any): Promise<any> => {
   try {
-    const response = await axios.post(`${API_URL}/test`, ruleData, {
-      params: { payload: JSON.stringify(payload) },
-      timeout: 10000
-    });
+    const response = await axios.post(`${API_URL}/test`, { ruleData, payload }, { timeout: 10000 });
     return response.data;
   } catch (error: any) {
     throw error;

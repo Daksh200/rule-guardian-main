@@ -92,6 +92,12 @@ export default function CreateRule() {
       });
       return;
     }
+    // Validate conditions
+    const invalid = logicGroups.some(g => g.conditions.some(c => !c.field || !c.operator || c.value === '' || c.value === undefined || c.value === null));
+    if (invalid) {
+      toast({ title: 'Validation Error', description: 'All conditions must have field, operator, and value.', variant: 'destructive' });
+      return;
+    }
 
     // Map frontend ruleType to backend category
     const categoryMap: { [key: string]: string } = {
@@ -120,13 +126,11 @@ export default function CreateRule() {
   const handleTestRule = async () => {
     console.log('handleTestRule called - starting test');
 
-    if (!logicGroups[0]?.conditions[0]?.field) {
-      console.log('Validation failed - no field specified');
-      toast({
-        title: 'Validation Error',
-        description: 'Please add at least one condition to test the rule.',
-        variant: 'destructive',
-      });
+    // Validate conditions
+    const invalid = logicGroups.some(g => g.conditions.some(c => !c.field || !c.operator || c.value === '' || c.value === undefined || c.value === null));
+    if (invalid) {
+      console.log('Validation failed - incomplete conditions');
+      toast({ title: 'Validation Error', description: 'All conditions must have field, operator, and value.', variant: 'destructive' });
       return;
     }
 
@@ -216,6 +220,12 @@ export default function CreateRule() {
         description: 'Please fill in all required fields.',
         variant: 'destructive',
       });
+      return;
+    }
+    // Validate conditions
+    const invalid = logicGroups.some(g => g.conditions.some(c => !c.field || !c.operator || c.value === '' || c.value === undefined || c.value === null));
+    if (invalid) {
+      toast({ title: 'Validation Error', description: 'All conditions must have field, operator, and value.', variant: 'destructive' });
       return;
     }
 
