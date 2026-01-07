@@ -72,6 +72,7 @@ export default function FraudRulesEngine() {
   const stats = useMemo(() => ({
     activeRules: rules.filter((r) => r.status === 'active').length,
     drafts: rules.filter((r) => r.status === 'draft').length,
+    inactiveRules: rules.filter((r) => r.status === 'inactive').length,
     triggered24h: rules.reduce((sum, r) => sum + (r.triggers24h || 0), 0),
     avgFraudScore: 'N/A',
   }), [rules]);
@@ -159,12 +160,11 @@ export default function FraudRulesEngine() {
           iconColor="text-destructive"
         />
         <StatCard
-          label="Avg Fraud Score"
-          value={stats.avgFraudScore}
-          subtitle={stats.avgFraudScore === 'N/A' ? undefined : '/100'}
-          icon={BarChart3}
-          iconBgColor="bg-info/10"
-          iconColor="text-info"
+          label="Inactive Rules"
+          value={stats.inactiveRules}
+          icon={History}
+          iconBgColor="bg-muted"
+          iconColor="text-muted-foreground"
         />
       </div>
 

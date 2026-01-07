@@ -418,7 +418,16 @@ export default function RulePerformance() {
                     dataKey="value"
                   >
                     {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={entry.color}
+                        onClick={() => {
+                          const map: Record<string, string> = { High: 'high', Med: 'medium', Low: 'low' };
+                          setSeverityFilter(map[entry.name] || 'all');
+                          setPage(1);
+                        }}
+                        cursor="pointer"
+                      />
                     ))}
                   </Pie>
                 </PieChart>
@@ -521,6 +530,25 @@ export default function RulePerformance() {
                   <SelectItem value="90">Last 90 Days</SelectItem>
                 </SelectContent>
               </Select>
+              {(severityFilter !== 'all' || decisionFilter !== 'all') && (
+                <div className="flex items-center gap-2 ml-2">
+                  {severityFilter !== 'all' && (
+                    <Button variant="outline" size="sm" onClick={() => { setSeverityFilter('all'); setPage(1); }}>
+                      Severity: {severityFilter}
+                      <X className="ml-1 w-3 h-3" />
+                    </Button>
+                  )}
+                  {decisionFilter !== 'all' && (
+                    <Button variant="outline" size="sm" onClick={() => { setDecisionFilter('all'); setPage(1); }}>
+                      Decision: {decisionFilter}
+                      <X className="ml-1 w-3 h-3" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => { setSeverityFilter('all'); setDecisionFilter('all'); setPage(1); }}>
+                    Clear filters
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>
