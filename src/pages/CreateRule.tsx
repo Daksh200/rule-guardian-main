@@ -61,6 +61,28 @@ export default function CreateRule() {
       : '(Add conditions to see summary)';
   };
 
+  const createRuleMutation = useMutation({
+    mutationFn: createRule,
+    onSuccess: (newRule) => {
+      queryClient.invalidateQueries({ queryKey: ['rules'] });
+      toast({
+        title: newRule.status === 'active' ? 'Rule Published' : 'Draft Saved',
+        description: `${newRule.name} is now ${newRule.status}.`,
+      });
+      if (newRule.status === 'active') {
+        navigate('/');
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: 'Failed to save rule. Please try again.',
+        variant: 'destructive',
+      });
+      console.error('Failed to create rule:', error);
+    },
+  });
+
   const handleSaveDraft = () => {
     if (!ruleName) {
       toast({
@@ -92,15 +114,7 @@ export default function CreateRule() {
       tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
     };
 
-    createRuleMutation.mutate(ruleData, {
-      onSuccess: (newRule) => {
-        toast({
-          title: 'Draft Saved',
-          description: 'Your rule has been saved as a draft.',
-        });
-        // Don't navigate away, stay on the create page
-      },
-    });
+    createRuleMutation.mutate(ruleData);
   };
 
   const handleTestRule = async () => {
@@ -129,7 +143,7 @@ export default function CreateRule() {
       console.log('Rule data:', ruleData);
 
       // Sample payload for testing
-      const samplePayload = claimId ? { claimId } : {
+      const payload = claimId ? { claimId } : {
         "claim": {
           "amount": 5000,
           "submission_count": 1
@@ -151,85 +165,26 @@ export default function CreateRule() {
         "distinct_claims": 3
       };
 
-      console.log('Sample payload:', samplePayload);
-      setSamplePayload(samplePayload);
+      console.log('Sample payload:', payload);
+      setSamplePayload(payload);
 
-      // Enhanced mock rule evaluation
-      const evaluateCondition = (condition: any, payload: any) => {
-        const { field, operator, value } = condition;
-        const fieldValue = field.split('.').reduce((obj: any, key: string) => obj?.[key], payload);
-        const numericValue = typeof value === 'string' ? parseInt(value || '0') : value || 0;
-        const numericFieldValue = typeof fieldValue === 'string' ? parseInt(fieldValue || '0') : fieldValue || 0;
+      const result = await testRule(ruleData, payload);
 
-        console.log(`Evaluating: ${fieldValue} ${operator} ${numericValue}`);
-
-        switch (operator) {
-          case 'greater':
-            return numericFieldValue > numericValue;
-          case 'less':
-            return numericFieldValue < numericValue;
-          case 'equals':
-            return fieldValue == value;
-          case 'not_equals':
-            return fieldValue != value;
-          case 'contains':
-            return String(fieldValue).includes(String(value));
-          default:
-            return false;
+      const mockResult = {
+        triggered: result.triggered,
+        severity: result.severity,
+        details: result.details,
+        executionTime: 'N/A', // Backend doesn't return this yet
+        testId: `TEST-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        // Keep some structure for UI compatibility if needed, or simplify UI
+        evaluation: {
+            overallResult: result.triggered,
+            payloadUsed: payload
         }
       };
 
-      // Evaluate all conditions in the first group
-      const conditions = logicGroups[0]?.conditions || [];
-      const evaluationResults = conditions.map((condition: any) => ({
-        condition,
-        fieldValue: condition.field.split('.').reduce((obj: any, key: string) => obj?.[key], samplePayload),
-        result: evaluateCondition(condition, samplePayload)
-      }));
-
-      const allConditionsMet = evaluationResults.every((evalResult: any) => evalResult.result);
-      const triggered = conditions.length > 0 && allConditionsMet;
-
-      // Rule validation checks
-      const validationIssues = [];
-      if (conditions.length === 0) validationIssues.push('No conditions defined');
-      if (conditions.some(c => !c.field)) validationIssues.push('Some conditions missing field selection');
-      if (conditions.some(c => !c.value)) validationIssues.push('Some conditions missing values');
-      if (conditions.some(c => c.operator === 'greater' && isNaN(Number(c.value)))) validationIssues.push('Numeric operators used with non-numeric values');
-
-      // Performance metrics
-      const startTime = performance.now();
-      // Simulate some processing time
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 50 + 10));
-      const endTime = performance.now();
-
-      const mockResult = {
-        triggered,
-        severity: severity || 'medium',
-        evaluation: {
-          conditions: evaluationResults,
-          overallResult: triggered,
-          payloadUsed: samplePayload
-        },
-        details: triggered
-          ? `Rule triggered successfully! All ${conditions.length} condition(s) were met.`
-          : `Rule did not trigger. ${evaluationResults.filter((r: any) => !r.result).length} out of ${conditions.length} condition(s) failed.`,
-        executionTime: `${(endTime - startTime).toFixed(2)}ms`,
-        testId: `TEST-${Date.now()}`,
-        validation: {
-          issues: validationIssues,
-          isValid: validationIssues.length === 0
-        },
-        performance: {
-          executionTime: endTime - startTime,
-          memoryUsage: 'N/A (Frontend)',
-          conditionsEvaluated: conditions.length
-        },
-        ruleLogic: logicGroups,
-        timestamp: new Date().toISOString()
-      };
-
-      console.log('Mock result:', mockResult);
+      console.log('Test result:', mockResult);
       setTestResult(mockResult);
 
       // Add to test history
@@ -253,26 +208,6 @@ export default function CreateRule() {
       console.log('Testing state reset');
     }
   };
-
-  const createRuleMutation = useMutation({
-    mutationFn: createRule,
-    onSuccess: (newRule) => {
-      queryClient.invalidateQueries({ queryKey: ['rules'] });
-      toast({
-        title: 'Rule Published',
-        description: `${ruleName} is now active.`,
-      });
-      navigate('/');
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: 'Failed to create rule. Please try again.',
-        variant: 'destructive',
-      });
-      console.error('Failed to create rule:', error);
-    },
-  });
 
   const handlePublish = () => {
     if (!ruleName || !ruleType || !severity) {
@@ -565,7 +500,7 @@ export default function CreateRule() {
                       Severity: <span className="font-medium">{testResult.severity}</span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      Execution Time: <span className="font-medium">{testResult.executionTime}</span> | Test ID: <span className="font-medium">{testResult.testId}</span>
+                      Test ID: <span className="font-medium">{testResult.testId}</span>
                     </div>
                     {testResult.details && (
                       <div className="text-xs text-muted-foreground mt-2 p-2 bg-muted/50 rounded">
@@ -573,56 +508,6 @@ export default function CreateRule() {
                       </div>
                     )}
                   </div>
-
-                  {/* Condition Evaluation Details */}
-                  {testResult.evaluation?.conditions && (
-                    <div className="p-3 bg-muted/30 rounded-lg">
-                      <div className="text-sm font-medium mb-2">Condition Evaluation Details:</div>
-                      <div className="space-y-2">
-                        {testResult.evaluation.conditions.map((evalResult: any, index: number) => (
-                          <div key={index} className="text-xs p-2 bg-muted/50 rounded">
-                            <div className="flex items-center gap-2 mb-1">
-                              <div className={`w-1.5 h-1.5 rounded-full ${evalResult.result ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                              <span className="font-medium">
-                                {evalResult.condition.field} {evalResult.condition.operator} {evalResult.condition.value}
-                              </span>
-                            </div>
-                            <div className="text-muted-foreground ml-3">
-                              Actual value: <span className="font-medium">{evalResult.fieldValue}</span> | Expected: <span className="font-medium">{evalResult.condition.operator} {evalResult.condition.value}</span> | Result: <span className={`font-medium ${evalResult.result ? 'text-green-600' : 'text-red-600'}`}>{evalResult.result ? 'PASS' : 'FAIL'}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Validation Issues */}
-                  {testResult.validation?.issues && testResult.validation.issues.length > 0 && (
-                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <div className="text-sm font-medium mb-2 text-yellow-800">Validation Issues:</div>
-                      <div className="space-y-1">
-                        {testResult.validation.issues.map((issue: string, index: number) => (
-                          <div key={index} className="text-xs text-yellow-700 flex items-center gap-2">
-                            <span className="w-1 h-1 bg-yellow-500 rounded-full"></span>
-                            {issue}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Performance Metrics */}
-                  {testResult.performance && (
-                    <div className="p-3 bg-muted/30 rounded-lg">
-                      <div className="text-sm font-medium mb-2">Performance Metrics:</div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>Execution Time: <span className="font-medium">{testResult.performance.executionTime.toFixed(2)}ms</span></div>
-                        <div>Conditions Evaluated: <span className="font-medium">{testResult.performance.conditionsEvaluated}</span></div>
-                        <div>Memory Usage: <span className="font-medium">{testResult.performance.memoryUsage}</span></div>
-                        <div>Test Timestamp: <span className="font-medium">{new Date(testResult.timestamp).toLocaleTimeString()}</span></div>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Sample Payload Used */}
                   <div className="p-3 bg-muted/30 rounded-lg">
@@ -667,56 +552,9 @@ export default function CreateRule() {
                       <div className="p-3 bg-muted/30 rounded-lg">
                         <div className="text-sm font-medium mb-2">Rule Logic Summary:</div>
                         <div className="text-xs text-muted-foreground">
-                          <div>Groups: {testResult.ruleLogic?.length || 0}</div>
+                          <div>Groups: {logicGroups.length}</div>
                           <div>Total Conditions: {logicGroups.reduce((acc, group) => acc + group.conditions.length, 0)}</div>
                           <div>Operators Used: {Array.from(new Set(logicGroups.flatMap(g => g.conditions.map(c => c.operator)))).join(', ')}</div>
-                        </div>
-                      </div>
-
-                      {/* Test Coverage Analysis */}
-                      <div className="p-3 bg-muted/30 rounded-lg">
-                        <div className="text-sm font-medium mb-2">Test Coverage Analysis:</div>
-                        <div className="text-xs text-muted-foreground space-y-1">
-                          <div>Payload Fields Used: {Array.from(new Set(logicGroups.flatMap(g => g.conditions.map(c => c.field)))).length}</div>
-                          <div>Payload Fields Available: {Object.keys(samplePayload).length + Object.values(samplePayload).filter(v => typeof v === 'object' && v !== null).reduce((acc, obj) => acc + Object.keys(obj as Record<string, any>).length, 0)}</div>
-                          <div>Coverage: {((Array.from(new Set(logicGroups.flatMap(g => g.conditions.map(c => c.field)))).length / (Object.keys(samplePayload).length + Object.values(samplePayload).filter(v => typeof v === 'object' && v !== null).reduce((acc, obj) => acc + Object.keys(obj as Record<string, any>).length, 0))) * 100).toFixed(1)}%</div>
-                        </div>
-                      </div>
-
-                      {/* Rule Complexity Score */}
-                      <div className="p-3 bg-muted/30 rounded-lg">
-                        <div className="text-sm font-medium mb-2">Rule Complexity Score:</div>
-                        <div className="text-xs text-muted-foreground space-y-1">
-                          <div>Score: {(() => {
-                            const conditions = logicGroups.reduce((acc, group) => acc + group.conditions.length, 0);
-                            const operators = new Set(logicGroups.flatMap(g => g.conditions.map(c => c.operator))).size;
-                            const complexity = (conditions * 2) + (operators * 3) + (logicGroups.length * 5);
-                            return complexity;
-                          })()} / 100</div>
-                          <div className="text-xs">
-                            <span className={`px-1 py-0.5 rounded text-xs ${(() => {
-                              const conditions = logicGroups.reduce((acc, group) => acc + group.conditions.length, 0);
-                              const operators = new Set(logicGroups.flatMap(g => g.conditions.map(c => c.operator))).size;
-                              const complexity = (conditions * 2) + (operators * 3) + (logicGroups.length * 5);
-                              return complexity < 20 ? 'text-green-600 bg-green-50' : complexity < 50 ? 'text-yellow-600 bg-yellow-50' : 'text-red-600 bg-red-50';
-                            })()}`}>
-                              {(() => {
-                                const conditions = logicGroups.reduce((acc, group) => acc + group.conditions.length, 0);
-                                const operators = new Set(logicGroups.flatMap(g => g.conditions.map(c => c.operator))).size;
-                                const complexity = (conditions * 2) + (operators * 3) + (logicGroups.length * 5);
-                                return complexity < 20 ? 'Low' : complexity < 50 ? 'Medium' : 'High';
-                              })()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Confidence Score */}
-                      <div className="p-3 bg-muted/30 rounded-lg">
-                        <div className="text-sm font-medium mb-2">Confidence Score:</div>
-                        <div className="text-xs text-muted-foreground space-y-1">
-                          <div>Score: {testResult.evaluation?.conditions ? ((testResult.evaluation.conditions.filter((c: any) => c.result).length / testResult.evaluation.conditions.length) * 100).toFixed(1) : 0}%</div>
-                          <div>Conditions Met: {testResult.evaluation?.conditions?.filter((c: any) => c.result).length || 0} / {testResult.evaluation?.conditions?.length || 0}</div>
                         </div>
                       </div>
 
@@ -734,67 +572,6 @@ export default function CreateRule() {
                         </pre>
                       </div>
 
-                      {/* Test Coverage Analysis */}
-                      <div className="p-3 bg-muted/30 rounded-lg">
-                        <div className="text-sm font-medium mb-2">Test Coverage Analysis:</div>
-                        <div className="text-xs text-muted-foreground space-y-1">
-                          <div>Payload Fields Used: {Array.from(new Set(logicGroups.flatMap(g => g.conditions.map(c => c.field)))).length}</div>
-                          <div>Payload Fields Available: {Object.keys(samplePayload).length + Object.values(samplePayload).filter(v => typeof v === 'object' && v !== null).reduce((acc, obj) => acc + Object.keys(obj as Record<string, any>).length, 0)}</div>
-                          <div>Coverage: {((Array.from(new Set(logicGroups.flatMap(g => g.conditions.map(c => c.field)))).length / (Object.keys(samplePayload).length + Object.values(samplePayload).filter(v => typeof v === 'object' && v !== null).reduce((acc, obj) => acc + Object.keys(obj as Record<string, any>).length, 0))) * 100).toFixed(1)}%</div>
-                        </div>
-                      </div>
-
-                      {/* Rule Complexity Score */}
-                      <div className="p-3 bg-muted/30 rounded-lg">
-                        <div className="text-sm font-medium mb-2">Rule Complexity Score:</div>
-                        <div className="text-xs text-muted-foreground space-y-1">
-                          <div>Score: {(() => {
-                            const conditions = logicGroups.reduce((acc, group) => acc + group.conditions.length, 0);
-                            const operators = new Set(logicGroups.flatMap(g => g.conditions.map(c => c.operator))).size;
-                            const complexity = (conditions * 2) + (operators * 3) + (logicGroups.length * 5);
-                            return complexity;
-                          })()} / 100</div>
-                          <div className="text-xs">
-                            <span className={`px-1 py-0.5 rounded text-xs ${(() => {
-                              const conditions = logicGroups.reduce((acc, group) => acc + group.conditions.length, 0);
-                              const operators = new Set(logicGroups.flatMap(g => g.conditions.map(c => c.operator))).size;
-                              const complexity = (conditions * 2) + (operators * 3) + (logicGroups.length * 5);
-                              return complexity < 20 ? 'text-green-600 bg-green-50' : complexity < 50 ? 'text-yellow-600 bg-yellow-50' : 'text-red-600 bg-red-50';
-                            })()}`}>
-                              {(() => {
-                                const conditions = logicGroups.reduce((acc, group) => acc + group.conditions.length, 0);
-                                const operators = new Set(logicGroups.flatMap(g => g.conditions.map(c => c.operator))).size;
-                                const complexity = (conditions * 2) + (operators * 3) + (logicGroups.length * 5);
-                                return complexity < 20 ? 'Low' : complexity < 50 ? 'Medium' : 'High';
-                              })()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Confidence Score */}
-                      <div className="p-3 bg-muted/30 rounded-lg">
-                        <div className="text-sm font-medium mb-2">Confidence Score:</div>
-                        <div className="text-xs text-muted-foreground space-y-1">
-                          <div>Score: {testResult.evaluation?.conditions ? ((testResult.evaluation.conditions.filter((c: any) => c.result).length / testResult.evaluation.conditions.length) * 100).toFixed(1) : 0}%</div>
-                          <div>Conditions Met: {testResult.evaluation?.conditions?.filter((c: any) => c.result).length || 0} / {testResult.evaluation?.conditions?.length || 0}</div>
-                        </div>
-                      </div>
-
-                      {/* Visual Rule Flow */}
-                      <div className="p-3 bg-muted/30 rounded-lg">
-                        <div className="text-sm font-medium mb-2">Rule Flow Visualization:</div>
-                        <pre className="text-xs text-muted-foreground font-mono bg-muted/50 p-2 rounded overflow-x-auto">
-{logicGroups.map((group, groupIndex) => (
-  `Group ${groupIndex + 1}:\n` +
-  group.conditions.map((cond, condIndex) =>
-    `  ${condIndex === 0 ? 'IF' : 'AND'} ${cond.field} ${cond.operator} ${cond.value}`
-  ).join('\n') +
-  `\n  THEN Trigger Rule\n`
-)).join('\n')}
-                        </pre>
-                      </div>
-
                       {/* Test History */}
                       {testHistory.length > 1 && (
                         <div className="p-3 bg-muted/30 rounded-lg">
@@ -806,36 +583,12 @@ export default function CreateRule() {
                                   <div className={`w-1.5 h-1.5 rounded-full ${historyItem.triggered ? 'bg-green-500' : 'bg-red-500'}`}></div>
                                   <span>{historyItem.testId}</span>
                                 </div>
-                                <span className="text-muted-foreground">{historyItem.executionTime}</span>
+                                <span className="text-muted-foreground">{historyItem.timestamp ? new Date(historyItem.timestamp).toLocaleTimeString() : ''}</span>
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
-
-                      {/* Optimization Suggestions */}
-                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <div className="text-sm font-medium mb-2 text-blue-800">Optimization Suggestions:</div>
-                        <div className="space-y-1">
-                          {(() => {
-                            const suggestions = [];
-                            const conditions = logicGroups.reduce((acc, group) => acc + group.conditions.length, 0);
-                            if (conditions > 5) suggestions.push('Consider breaking complex rules into multiple simpler rules');
-                            if (logicGroups.length > 1) suggestions.push('Multiple logic groups detected - ensure proper AND/OR logic');
-                            const operators = Array.from(new Set(logicGroups.flatMap(g => g.conditions.map(c => c.operator))));
-                            if (operators.includes('contains') && operators.some(op => ['greater', 'less', 'equals'].includes(op))) {
-                              suggestions.push('Mixing string and numeric operators - verify data types');
-                            }
-                            if (suggestions.length === 0) suggestions.push('Rule structure looks optimal');
-                            return suggestions;
-                          })().map((suggestion: string, index: number) => (
-                            <div key={index} className="text-xs text-blue-700 flex items-center gap-2">
-                              <span className="w-1 h-1 bg-blue-500 rounded-full"></span>
-                              {suggestion}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
                     </div>
                   )}
                 </div>

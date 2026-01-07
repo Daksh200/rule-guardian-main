@@ -142,6 +142,17 @@ def read_rule_versions(rule_id: int, db: Session = Depends(get_db)):
     versions = crud.get_rule_versions(db, rule_id=rule_id)
     return versions
 
+@router.put("/versions/{version_id}", response_model=schemas.RuleVersion)
+def update_rule_version(version_id: int, payload: Dict[str, Any], db: Session = Depends(get_db)):
+    notes = payload.get("notes")
+    if notes is None:
+        raise HTTPException(status_code=400, detail="Notes field is required")
+    
+    version = crud.update_rule_version(db, version_id, notes)
+    if not version:
+        raise HTTPException(status_code=404, detail="Rule version not found")
+    return version
+
 @router.post("/test")
 def test_rule(
     rule_data: Dict[str, Any],

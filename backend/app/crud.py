@@ -120,6 +120,15 @@ def create_rule_version(
 def get_rule_versions(db: Session, rule_id: int):
     return db.query(models.RuleVersion).filter(models.RuleVersion.rule_id == rule_id).order_by(desc(models.RuleVersion.created_at)).all()
 
+def update_rule_version(db: Session, version_id: int, notes: str):
+    db_version = db.query(models.RuleVersion).filter(models.RuleVersion.id == version_id).first()
+    if not db_version:
+        return None
+    db_version.notes = notes
+    db.commit()
+    db.refresh(db_version)
+    return db_version
+
 # --- Analytics Helper Functions ---
 def get_rule_stats(db: Session, rule_id: int):
     now = datetime.now()

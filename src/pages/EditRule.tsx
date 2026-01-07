@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Info, SlidersHorizontal, Lightbulb, Save, FlaskConical, Upload, AlertTriangle } from 'lucide-react';
+import { ChevronRight, Info, SlidersHorizontal, Lightbulb, Save, FlaskConical, Upload, AlertTriangle, X, Check } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { LogicBuilder } from '@/components/rules/LogicBuilder';
 import { StatusBadge } from '@/components/rules/Badges';
@@ -11,11 +11,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { ruleTypeOptions, severityOptions, admins } from '@/data/mockData';
 import { ConditionGroup, RuleVersion, FraudRule } from '@/types/fraud';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { getRule, updateRule, testRule, publishRule } from '@/api/rules';
+import { getRule, updateRule, testRule, publishRule, getRuleVersions, updateRuleVersionNotes } from '@/api/rules';
 
 export default function EditRule() {
   const navigate = useNavigate();
@@ -28,6 +29,12 @@ export default function EditRule() {
     queryFn: () => getRule(id as string),
     enabled: !!id,
   });
+
+  const { data: versions = [] } = useQuery({
+    queryKey: ['rule', id, 'versions'],
+    queryFn: () => getRuleVersions(id as string),
+    enabled: !!id,
+  });
   
   const [ruleName, setRuleName] = useState('');
   const [description, setDescription] = useState('');
@@ -38,6 +45,16 @@ export default function EditRule() {
   const [logicGroups, setLogicGroups] = useState<ConditionGroup[]>([]);
   const [versionNotes, setVersionNotes] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  
+  // Test Rule State
+  const [isTestDialogOpen, setIsTestDialogOpen] = useState(false);
+  const [testPayload, setTestPayload] = useState('');
+  const [testResult, setTestResult] = useState<any>(null);
+  const [isTesting, setIsTesting] = useState(false);
+
+  // Compare State
+  const [isCompareDialogOpen, setIsCompareDialogOpen] = useState(false);
+  const [compareVersionId, setCompareVersionId] = useState<string>('');
 
   useEffect(() => {
     if (rule) {
@@ -49,6 +66,14 @@ export default function EditRule() {
       setLogicGroups(rule.logic.groups);
     }
   }, [rule]);
+
+  // Set initial version notes from the latest version if available
+  useEffect(() => {
+    if (versions.length > 0) {
+      // Assuming the first one is the latest/current one being edited or viewed
+      setVersionNotes(versions[0].notes || '');
+    }
+  }, [versions]);
 
   const handleChange = () => {
     setHasUnsavedChanges(true);
@@ -74,18 +99,53 @@ export default function EditRule() {
     }
   };
 
-  const handleTestRule = async () => {
+  const handleSaveNote = async () => {
+    if (!id || versions.length === 0) return;
+    // Assuming we are updating the note of the latest version
+    const latestVersion = versions[0];
     try {
-      await testRule({ severity, groups: logicGroups }, {});
-      toast({ title: 'Testing Rule', description: 'Test executed.' });
-    } catch {
+      await updateRuleVersionNotes(latestVersion.id.toString(), versionNotes);
+      queryClient.invalidateQueries({ queryKey: ['rule', id, 'versions'] });
+      toast({ title: 'Note Saved', description: 'Version note updated.' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to save note.', variant: 'destructive' });
+    }
+  };
+
+  const handleTestRule = async () => {
+    if (!testPayload) {
+      toast({ title: 'Validation Error', description: 'Please provide a JSON payload.', variant: 'destructive' });
+      return;
+    }
+    
+    let parsedPayload;
+    try {
+      parsedPayload = JSON.parse(testPayload);
+    } catch (e) {
+      toast({ title: 'Validation Error', description: 'Invalid JSON format.', variant: 'destructive' });
+      return;
+    }
+
+    setIsTesting(true);
+    try {
+      const result = await testRule({ severity, groups: logicGroups }, parsedPayload);
+      setTestResult(result);
+      toast({ title: 'Test Completed', description: result.triggered ? 'Rule Triggered!' : 'Rule did not trigger.' });
+    } catch (e) {
       toast({ title: 'Error', description: 'Test failed.', variant: 'destructive' });
+    } finally {
+      setIsTesting(false);
     }
   };
 
   const handlePublish = async () => {
     if (!id) return;
     try {
+      // Determine next version number (simple increment logic for demo)
+      const currentVer = rule?.currentVersion || 'v1.0';
+      const verNum = parseInt(currentVer.replace('v', '').replace('.', '')) + 1;
+      const nextVersion = `v${Math.floor(verNum/10)}.${verNum%10}`; // e.g. v1.1
+
       const payload = {
         name: ruleName,
         description,
@@ -93,11 +153,11 @@ export default function EditRule() {
         severity,
         tags: tags.split(',').map(t => t.trim()).filter(Boolean),
         logic: { groups: logicGroups },
-        version: rule?.currentVersion || 'v1.0',
+        version: nextVersion,
         notes: versionNotes,
       };
       await publishRule(id, payload as any);
-      toast({ title: 'Changes Published', description: `${ruleName} published.` });
+      toast({ title: 'Changes Published', description: `${ruleName} published as ${nextVersion}.` });
       navigate('/');
     } catch (e) {
       toast({ title: 'Error', description: 'Failed to publish changes.', variant: 'destructive' });
@@ -113,6 +173,22 @@ export default function EditRule() {
       title: 'Changes Discarded',
       description: 'All unsaved changes have been reverted.',
     });
+  };
+
+  const getComparisonDiff = () => {
+    if (!compareVersionId) return null;
+    const compareVersion = versions.find(v => v.id.toString() === compareVersionId);
+    if (!compareVersion) return null;
+
+    // Simple diff logic: compare current state vs selected version
+    const currentLogic = JSON.stringify(logicGroups);
+    const compareLogic = JSON.stringify(compareVersion.logic_snapshot.groups);
+    
+    return {
+      version: compareVersion.version,
+      isLogicDifferent: currentLogic !== compareLogic,
+      // Add more granular diffs if needed
+    };
   };
 
   return (
@@ -147,10 +223,63 @@ export default function EditRule() {
             <Save className="w-4 h-4" />
             Save Draft
           </Button>
-          <Button variant="outline" onClick={handleTestRule} className="gap-2 text-primary border-primary/30">
-            <FlaskConical className="w-4 h-4" />
-            Test Rule
-          </Button>
+          
+          <Dialog open={isTestDialogOpen} onOpenChange={setIsTestDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2 text-primary border-primary/30">
+                <FlaskConical className="w-4 h-4" />
+                Test Rule
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle>Test Rule Logic</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Test Payload (JSON)</Label>
+                  <Textarea 
+                    value={testPayload}
+                    onChange={(e) => setTestPayload(e.target.value)}
+                    placeholder='{"claim": {"amount": 5000, ...}}'
+                    className="font-mono text-xs min-h-[200px]"
+                  />
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setTestPayload(JSON.stringify({
+                      claim: { amount: 5000, submission_count: 1 },
+                      claimant: { ip_address: "192.168.1.1" },
+                      transaction: { count: 5 }
+                    }, null, 2))}>
+                      Load Sample
+                    </Button>
+                  </div>
+                </div>
+                
+                {testResult && (
+                  <div className={cn("p-4 rounded-lg border", testResult.triggered ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200")}>
+                    <div className="flex items-center gap-2 font-semibold mb-2">
+                      {testResult.triggered ? <X className="text-red-600 w-5 h-5" /> : <Check className="text-green-600 w-5 h-5" />}
+                      <span className={testResult.triggered ? "text-red-700" : "text-green-700"}>
+                        {testResult.triggered ? "Rule Triggered" : "Rule Not Triggered"}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{testResult.details}</p>
+                    {testResult.triggered && (
+                      <div className="mt-2 text-xs font-medium text-red-600">
+                        Severity: {testResult.severity}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button onClick={handleTestRule} disabled={isTesting}>
+                  {isTesting ? 'Running...' : 'Run Test'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Button onClick={handlePublish} className="gap-2">
             <Upload className="w-4 h-4" />
             Publish Changes
@@ -311,13 +440,63 @@ export default function EditRule() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Version History</CardTitle>
-                <Button variant="link" size="sm" className="text-primary p-0 h-auto">
-                  Compare
-                </Button>
+                <Dialog open={isCompareDialogOpen} onOpenChange={setIsCompareDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="link" size="sm" className="text-primary p-0 h-auto">
+                      Compare
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Compare Versions</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label>Select Version to Compare with Current Draft</Label>
+                        <Select value={compareVersionId} onValueChange={setCompareVersionId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a version" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {versions.map((v: RuleVersion) => (
+                              <SelectItem key={v.id} value={v.id.toString()}>
+                                {v.version} ({new Date(v.createdAt).toLocaleDateString()})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      {compareVersionId && (
+                        <div className="p-4 bg-muted rounded-lg text-sm">
+                          {(() => {
+                            const diff = getComparisonDiff();
+                            if (!diff) return null;
+                            return (
+                              <div className="space-y-2">
+                                <p>Comparing <strong>Current Draft</strong> with <strong>{diff.version}</strong>:</p>
+                                <div className="flex items-center gap-2">
+                                  {diff.isLogicDifferent ? (
+                                    <span className="text-yellow-600 font-medium">Logic has changed</span>
+                                  ) : (
+                                    <span className="text-green-600 font-medium">Logic is identical</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {(rule?.versions || []).map((version: RuleVersion, index: number) => (
+            <CardContent className="space-y-3 max-h-[300px] overflow-y-auto">
+              {versions.length === 0 && (
+                <p className="text-xs text-muted-foreground">No history available.</p>
+              )}
+              {versions.map((version: RuleVersion) => (
                 <div
                   key={version.id}
                   className={cn(
@@ -339,7 +518,7 @@ export default function EditRule() {
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {version.createdAt} by {version.createdBy}
+                      {new Date(version.createdAt).toLocaleString()}
                     </p>
                     {version.isDraft && hasUnsavedChanges && (
                       <span className="inline-block mt-1 text-xs bg-warning/20 text-warning px-2 py-0.5 rounded">
@@ -367,7 +546,7 @@ export default function EditRule() {
                 placeholder="Describe what changed in this version..."
                 className="min-h-[100px] bg-muted/50"
               />
-              <Button variant="link" size="sm" className="text-primary p-0 h-auto">
+              <Button variant="link" size="sm" className="text-primary p-0 h-auto" onClick={handleSaveNote}>
                 Save Note
               </Button>
             </CardContent>
@@ -394,11 +573,11 @@ export default function EditRule() {
       {/* Footer */}
       <div className="fixed bottom-0 left-64 right-0 bg-card border-t border-border px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4 text-sm">
-          <span className="text-muted-foreground">Last saved: 10 mins ago</span>
+          <span className="text-muted-foreground">Last saved: {rule?.lastUpdated || 'Never'}</span>
           {hasUnsavedChanges && (
             <div className="flex items-center gap-1.5 text-warning">
               <AlertTriangle className="w-4 h-4" />
-              <span>2 validation warnings</span>
+              <span>Unsaved changes</span>
             </div>
           )}
         </div>

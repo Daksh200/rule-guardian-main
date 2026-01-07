@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { FraudRule, RuleStatus, TriggerTrend, SeverityDistribution, ConditionHit, TriggeredClaim, RuleLogic } from '@/types/fraud';
+import { FraudRule, RuleStatus, TriggerTrend, SeverityDistribution, ConditionHit, TriggeredClaim, RuleLogic, RuleVersion } from '@/types/fraud';
 
 const API_URL = 'http://localhost:8000/api/rules';
 
@@ -35,6 +35,16 @@ export const deleteRule = async (id: string): Promise<void> => {
 
 export const updateRuleStatus = async (id: string, status: RuleStatus): Promise<FraudRule> => {
   const response = await axios.put(`${API_URL}/${id}`, { status });
+  return response.data;
+};
+
+export const getRuleVersions = async (id: string): Promise<RuleVersion[]> => {
+  const response = await axios.get(`${API_URL}/${id}/versions`);
+  return response.data;
+};
+
+export const updateRuleVersionNotes = async (versionId: string, notes: string): Promise<RuleVersion> => {
+  const response = await axios.put(`${API_URL}/versions/${versionId}`, { notes });
   return response.data;
 };
 

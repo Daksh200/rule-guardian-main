@@ -30,6 +30,7 @@ export interface RuleVersion {
   notes?: string;
   isActive: boolean;
   isDraft: boolean;
+  logic_snapshot: RuleLogic;
 }
 
 export interface FraudRule {
