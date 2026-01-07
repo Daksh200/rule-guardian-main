@@ -52,7 +52,7 @@ export function AuditLogDrawer({ open, onOpenChange }: { open: boolean; onOpenCh
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-w-7xl">
         <DialogHeader>
           <DialogTitle>Audit Log</DialogTitle>
         </DialogHeader>
@@ -91,16 +91,16 @@ export function AuditLogDrawer({ open, onOpenChange }: { open: boolean; onOpenCh
         </div>
 
         {/* Table */}
-        <div className="border rounded-md">
-          <Table>
+        <div className="border rounded-md max-h-[400px] overflow-auto">
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>Time</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Entity</TableHead>
-                <TableHead>Summary</TableHead>
-                <TableHead>Details</TableHead>
+                <TableHead className="w-[180px]">Time</TableHead>
+                <TableHead className="w-[200px]">Actor</TableHead>
+                <TableHead className="w-[160px]">Action</TableHead>
+                <TableHead className="w-[160px]">Entity</TableHead>
+                <TableHead className="w-[220px]">Summary</TableHead>
+                <TableHead className="w-[300px]">Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -113,11 +113,11 @@ export function AuditLogDrawer({ open, onOpenChange }: { open: boolean; onOpenCh
               {(data?.items || []).map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="whitespace-nowrap">{row.created_at ? new Date(row.created_at).toLocaleString() : ''}</TableCell>
-                  <TableCell>{row.actor_email || 'system'}</TableCell>
-                  <TableCell className="uppercase text-xs">{row.action}</TableCell>
-                  <TableCell className="uppercase text-xs">{row.entity_type}{row.entity_id ? `#${row.entity_id}` : ''}</TableCell>
-                  <TableCell>{row.entity_label || ''}</TableCell>
-                  <TableCell>
+                  <TableCell className="truncate">{row.actor_email || 'system'}</TableCell>
+                  <TableCell className="uppercase text-xs break-words">{row.action}</TableCell>
+                  <TableCell className="uppercase text-xs break-words">{row.entity_type}{row.entity_id ? `#${row.entity_id}` : ''}</TableCell>
+                  <TableCell className="break-words">{row.entity_label || ''}</TableCell>
+                  <TableCell className="truncate">
                     <pre className="text-xs bg-muted/40 rounded p-2 max-h-[120px] overflow-auto">{JSON.stringify(row.metadata || {}, null, 2)}</pre>
                   </TableCell>
                 </TableRow>
